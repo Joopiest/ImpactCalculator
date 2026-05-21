@@ -340,14 +340,28 @@ for field in main_persistent:
 cloud_load_on_startup()
 
 def _pv(key, default=0.0):
-    """Read field value directly from persistent shadow key."""
-    p_val = st.session_state.get(f"_p_val_{key}")
+    """Read field value directly from persistent shadow key, or fallback to active widget state."""
+    w_key = f"val_{key}"
+    p_key = f"_p_val_{key}"
+    # 1. If widget is active and in session state, it's the absolute source of truth
+    if w_key in st.session_state:
+        st.session_state[p_key] = st.session_state[w_key]
+        return st.session_state[w_key]
+    # 2. Otherwise use the persistent shadow key
+    p_val = st.session_state.get(p_key)
     if p_val is not None: return p_val
     return default
 
 def _pc(section):
-    """Read checkbox state directly from persistent shadow key."""
-    p_val = st.session_state.get(f"_p_chk_{section}")
+    """Read checkbox state directly from persistent shadow key, or fallback to active widget state."""
+    w_key = f"chk_{section}"
+    p_key = f"_p_chk_{section}"
+    # 1. If widget is active and in session state, it's the absolute source of truth
+    if w_key in st.session_state:
+        st.session_state[p_key] = st.session_state[w_key]
+        return st.session_state[w_key]
+    # 2. Otherwise use the persistent shadow key
+    p_val = st.session_state.get(p_key)
     if p_val is not None: return p_val
     return False
 
