@@ -194,12 +194,30 @@ def init_states():
 
 def snapshot_state():
     """Manual trigger to save all current widget values to persistent shadow keys and cloud."""
-    sync_project_meta()
+    # 1. Sync Tab 1 Metadata
+    meta_fields = ["projectId", "projectName", "reportType", "meta_krrn", "meta_krid", "meta_krrn_related", "meta_patent_id"]
+    for field in meta_fields:
+        w_key = f"wid_{field}"
+        if w_key in st.session_state:
+            new_val = st.session_state[w_key]
+            if new_val is not None:
+                st.session_state[field] = new_val
+
+    # 2. Sync Checkboxes directly to persistent shadow keys
     for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
-        sync_chk(s)
+        w_chk = f"chk_{s}"
+        p_chk = f"_p_chk_{s}"
+        if w_chk in st.session_state:
+            st.session_state[p_chk] = st.session_state[w_chk]
+            
+    # 3. Sync Field Values directly to persistent shadow keys
     for k in FIELD_DEFAULTS:
-        sync_val(k)
-    # Extra safety: Always save to cloud when a snapshot is taken (e.g. on Next or Tab switch)
+        w_val = f"val_{k}"
+        p_val = f"_p_val_{k}"
+        if w_val in st.session_state:
+            st.session_state[p_val] = st.session_state[w_val]
+
+    # 4. Autosave to cloud for extra safety
     autosave_to_cloud()
 
 def deep_sync_all():
