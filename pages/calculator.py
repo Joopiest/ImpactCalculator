@@ -7,90 +7,90 @@ from datetime import datetime
 # Inject background JavaScript to automatically detect browser autofill on input fields
 # and dispatch synthetic events so Streamlit's React frontend registers the values.
 st.markdown(
-    """
-    <img src="does-not-exist" style="display:none;" onerror="
-        if (!window._autofillInterval) {
-            const syncStreamlitInputs = (forceBlur, skipActive) => {
-                if (forceBlur) {
-                    const active = document.activeElement;
-                    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT')) {
-                        active.blur();
-                    }
-                }
-                const inputs = document.querySelectorAll('input, textarea, select');
-                inputs.forEach(input => {
-                    if (skipActive && input === document.activeElement) {
-                        return;
-                    }
-                    if (input.value !== undefined && input.value !== null) {
-                        const lastVal = input.getAttribute('data-last-synced') || '';
-                        if (input.value !== lastVal) {
-                            input.setAttribute('data-last-synced', input.value);
-                            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
-                            if (nativeInputValueSetter && nativeInputValueSetter.set && input.tagName === 'INPUT' && input.type !== 'checkbox' && input.type !== 'radio') {
-                                nativeInputValueSetter.set.call(input, input.value);
-                            } else if (input.tagName === 'TEXTAREA') {
-                                const nativeTextAreaValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value');
-                                if (nativeTextAreaValueSetter && nativeTextAreaValueSetter.set) {
-                                    nativeTextAreaValueSetter.set.call(input, input.value);
-                                }
-                            }
-                            input.dispatchEvent(new Event('input', { bubbles: true }));
-                            input.dispatchEvent(new Event('change', { bubbles: true }));
-                            input.dispatchEvent(new Event('blur', { bubbles: true }));
-                        }
-                    }
-                });
-            };
-            window._syncStreamlitInputsNow = syncStreamlitInputs;
-            window._autofillInterval = setInterval(() => syncStreamlitInputs(false, true), 300);
-            
-            document.addEventListener('click', (e) => {
-                const target = e.target.closest('button, [role=&quot;button&quot;], [role=&quot;option&quot;], [role=&quot;tab&quot;]');
-                if (target) {
-                    const btnText = target.textContent || '';
-                    const isNavBtn = btnText.includes('Next') || 
-                                      btnText.includes('Back') || 
-                                      btnText.includes('ขั้นตอนถัดไป') || 
-                                      btnText.includes('ย้อนกลับ') || 
-                                      btnText.includes('บันทึก') || 
-                                      btnText.includes('เซฟ') || 
-                                      btnText.includes('Save') || 
-                                      btnText.includes('Details') || 
-                                      btnText.includes('Pre-Impact') || 
-                                      btnText.includes('Pre-Investment') || 
-                                      btnText.includes('Summary') || 
-                                      btnText.includes('Submit') || 
-                                      btnText.includes('Drafts') || 
-                                      btnText.includes('โหลด') || 
-                                      btnText.includes('Load') ||
-                                      btnText.includes('ส่งรายงาน');
-                    if (isNavBtn && !target.hasAttribute('data-sync-delayed')) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        const active = document.activeElement;
-                        if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT')) {
-                            active.blur();
-                        }
-                        syncStreamlitInputs(true, false);
-                        target.setAttribute('data-sync-delayed', 'true');
-                        setTimeout(() => {
-                            target.click();
-                            target.removeAttribute('data-sync-delayed');
-                        }, 250);
-                    }
-                }
-            }, true);
-            
-            document.addEventListener('mouseover', (e) => {
-                const target = e.target.closest('button, [role=&quot;button&quot;], [role=&quot;option&quot;], [role=&quot;tab&quot;]');
-                if (target) {
-                    syncStreamlitInputs(false, true);
-                }
-            });
-        }
-    ">
-    """,
+"""
+<img src="does-not-exist" style="display:none;" onerror="
+if (!window._autofillInterval) {
+const syncStreamlitInputs = (forceBlur, skipActive) => {
+if (forceBlur) {
+const active = document.activeElement;
+if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT')) {
+active.blur();
+}
+}
+const inputs = document.querySelectorAll('input, textarea, select');
+inputs.forEach(input => {
+if (skipActive && input === document.activeElement) {
+return;
+}
+if (input.value !== undefined && input.value !== null) {
+const lastVal = input.getAttribute('data-last-synced') || '';
+if (input.value !== lastVal) {
+input.setAttribute('data-last-synced', input.value);
+const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
+if (nativeInputValueSetter && nativeInputValueSetter.set && input.tagName === 'INPUT' && input.type !== 'checkbox' && input.type !== 'radio') {
+nativeInputValueSetter.set.call(input, input.value);
+} else if (input.tagName === 'TEXTAREA') {
+const nativeTextAreaValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value');
+if (nativeTextAreaValueSetter && nativeTextAreaValueSetter.set) {
+nativeTextAreaValueSetter.set.call(input, input.value);
+}
+}
+input.dispatchEvent(new Event('input', { bubbles: true }));
+input.dispatchEvent(new Event('change', { bubbles: true }));
+input.dispatchEvent(new Event('blur', { bubbles: true }));
+}
+}
+});
+};
+window._syncStreamlitInputsNow = syncStreamlitInputs;
+window._autofillInterval = setInterval(() => syncStreamlitInputs(false, true), 300);
+
+document.addEventListener('click', (e) => {
+const target = e.target.closest('button, [role=&quot;button&quot;], [role=&quot;option&quot;], [role=&quot;tab&quot;]');
+if (target) {
+const btnText = target.textContent || '';
+const isNavBtn = btnText.includes('Next') ||
+btnText.includes('Back') ||
+btnText.includes('ขั้นตอนถัดไป') ||
+btnText.includes('ย้อนกลับ') ||
+btnText.includes('บันทึก') ||
+btnText.includes('เซฟ') ||
+btnText.includes('Save') ||
+btnText.includes('Details') ||
+btnText.includes('Pre-Impact') ||
+btnText.includes('Pre-Investment') ||
+btnText.includes('Summary') ||
+btnText.includes('Submit') ||
+btnText.includes('Drafts') ||
+btnText.includes('โหลด') ||
+btnText.includes('Load') ||
+btnText.includes('ส่งรายงาน');
+if (isNavBtn && !target.hasAttribute('data-sync-delayed')) {
+e.preventDefault();
+e.stopPropagation();
+const active = document.activeElement;
+if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT')) {
+active.blur();
+}
+syncStreamlitInputs(true, false);
+target.setAttribute('data-sync-delayed', 'true');
+setTimeout(() => {
+target.click();
+target.removeAttribute('data-sync-delayed');
+}, 250);
+}
+}
+}, true);
+
+document.addEventListener('mouseover', (e) => {
+const target = e.target.closest('button, [role=&quot;button&quot;], [role=&quot;option&quot;], [role=&quot;tab&quot;]');
+if (target) {
+syncStreamlitInputs(false, true);
+}
+});
+}
+">
+""",
     unsafe_allow_html=True
 )
 
