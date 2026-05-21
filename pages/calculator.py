@@ -422,6 +422,7 @@ if st.session_state.active_calc_tab == TABS_LIST[0]:
     st.markdown("### 📋 กรอกข้อมูลรายละเอียดโครงการ")
     st.text_input(
         "รหัสโครงการ (Project ID) 👉 [กรอกข้อมูล]",
+        value=st.session_state.get("projectId", ""),
         key="wid_projectId",
         on_change=sync_project_meta,
         placeholder="เช่น P-20-XXXXX",
@@ -429,6 +430,7 @@ if st.session_state.active_calc_tab == TABS_LIST[0]:
     )
     st.text_input(
         "ชื่อโครงการ (Project Name) 👉 [กรอกข้อมูล]",
+        value=st.session_state.get("projectName", ""),
         key="wid_projectName",
         on_change=sync_project_meta,
         placeholder="ระบุชื่อโครงการวิจัย...",
@@ -454,6 +456,7 @@ if st.session_state.active_calc_tab == TABS_LIST[0]:
     
     st.text_input(
         "7. เลขที่ KRRN ผลงาน 3P 👉 [กรอกข้อมูล]",
+        value=st.session_state.get("meta_krrn", ""),
         key="wid_meta_krrn",
         on_change=sync_project_meta,
         placeholder="ตัวอย่าง: 65248, 70065",
@@ -461,6 +464,7 @@ if st.session_state.active_calc_tab == TABS_LIST[0]:
     )
     st.text_input(
         "8. เลขที่ KRID ผลงาน 3P 👉 [กรอกข้อมูล]",
+        value=st.session_state.get("meta_krid", ""),
         key="wid_meta_krid",
         on_change=sync_project_meta,
         placeholder="ตัวอย่าง: 45606029, 45809086",
@@ -468,6 +472,7 @@ if st.session_state.active_calc_tab == TABS_LIST[0]:
     )
     st.text_input(
         "9. เลขที่ KRRN ผลงาน 3P ที่เกี่ยวข้อง 👉 [กรอกข้อมูล]",
+        value=st.session_state.get("meta_krrn_related", ""),
         key="wid_meta_krrn_related",
         on_change=sync_project_meta,
         placeholder="ตัวอย่าง: 45606029, 45809086",
@@ -475,6 +480,7 @@ if st.session_state.active_calc_tab == TABS_LIST[0]:
     )
     st.text_input(
         "10. เลขที่คำขอยื่นสิทธิบัตร/อนุสิทธิบัตร 👉 [กรอกข้อมูล]",
+        value=st.session_state.get("meta_patent_id", ""),
         key="wid_meta_patent_id",
         on_change=sync_project_meta,
         placeholder="ตัวอย่าง: BTT028/2560 (LCA-NT-2560-3304-TH)",
