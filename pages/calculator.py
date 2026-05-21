@@ -347,7 +347,7 @@ def restore_tab(tab_name):
                 if owk in st.session_state:
                     del st.session_state[owk]
                     
-    # 2. Restore active tab's widget keys
+    # 2. Initialize persistent keys if they don't exist
     w_keys, p_keys = get_tab_keys(tab_name)
     for w_key, p_key in zip(w_keys, p_keys):
         if p_key not in st.session_state:
@@ -362,7 +362,8 @@ def restore_tab(tab_name):
                     st.session_state[field] = "รายปี"
                 else:
                     st.session_state[field] = ""
-        st.session_state[w_key] = st.session_state[p_key]
+        # We NO LONGER set st.session_state[w_key] here to avoid Streamlit warnings and overwrites.
+        # The widgets now use value= or index= parameters directly.
 
 def snapshot_state():
     """Manual fallback to save active tab's states and trigger autosave."""
@@ -646,7 +647,7 @@ if st.session_state.active_calc_tab == TABS_LIST[0]:
     st.text_input(
         "รหัสโครงการ (Project ID) 👉 [กรอกข้อมูล]",
         
-        key="wid_projectId",
+        value=st.session_state.get("projectId", ""), key="wid_projectId",
         on_change=sync_project_meta,
         placeholder="เช่น P-20-XXXXX",
         help="รหัสอ้างอิงโครงการที่จดทะเบียนของหน่วยงาน"
@@ -654,7 +655,7 @@ if st.session_state.active_calc_tab == TABS_LIST[0]:
     st.text_input(
         "ชื่อโครงการ (Project Name) 👉 [กรอกข้อมูล]",
         
-        key="wid_projectName",
+        value=st.session_state.get("projectName", ""), key="wid_projectName",
         on_change=sync_project_meta,
         placeholder="ระบุชื่อโครงการวิจัย...",
         help="ชื่อหัวข้อโครงการวิจัยและพัฒนาฉบับเต็ม"
@@ -666,7 +667,7 @@ if st.session_state.active_calc_tab == TABS_LIST[0]:
         "แนวทางการรายงานผล (Report Timeline Style) 👉 [กรอกข้อมูล]",
         ["รายปี", "5 ปี"],
         
-        key="wid_reportType",
+        index=0 if st.session_state.get("reportType", "รายปี") == "รายปี" else 1, key="wid_reportType",
         on_change=sync_project_meta,
         horizontal=True,
         help="ระบุรูปแบบการวัดผลกระทบ: แบบรายปีปกติ หรือ ประเมินสะสมรวมระยะเวลา 5 ปี (60 เดือน)"
@@ -680,7 +681,7 @@ if st.session_state.active_calc_tab == TABS_LIST[0]:
     st.text_input(
         "7. เลขที่ KRRN ผลงาน 3P 👉 [กรอกข้อมูล]",
         
-        key="wid_meta_krrn",
+        value=st.session_state.get("meta_krrn", ""), key="wid_meta_krrn",
         on_change=sync_project_meta,
         placeholder="ตัวอย่าง: 65248, 70065",
         help='เลขที่ KRRN ผลงาน 3P (ถ้าไม่มี ให้ระบุว่า "ไม่มี" หรือ ถ้ามีมากกว่า 1 ให้ใช้ ",")'
@@ -688,7 +689,7 @@ if st.session_state.active_calc_tab == TABS_LIST[0]:
     st.text_input(
         "8. เลขที่ KRID ผลงาน 3P 👉 [กรอกข้อมูล]",
         
-        key="wid_meta_krid",
+        value=st.session_state.get("meta_krid", ""), key="wid_meta_krid",
         on_change=sync_project_meta,
         placeholder="ตัวอย่าง: 45606029, 45809086",
         help='เลขที่ KRID ผลงาน 3P (ถ้าไม่มี ให้ระบุว่า "ไม่มี" หรือ ถ้ามีมากกว่า 1 ให้ใช้ ",")'
@@ -696,7 +697,7 @@ if st.session_state.active_calc_tab == TABS_LIST[0]:
     st.text_input(
         "9. เลขที่ KRRN ผลงาน 3P ที่เกี่ยวข้อง 👉 [กรอกข้อมูล]",
         
-        key="wid_meta_krrn_related",
+        value=st.session_state.get("meta_krrn_related", ""), key="wid_meta_krrn_related",
         on_change=sync_project_meta,
         placeholder="ตัวอย่าง: 45606029, 45809086",
         help='เลขที่ KRRN ผลงาน 3P ที่เกี่ยวข้อง (ถ้าไม่มี ให้ระบุว่า "ไม่มี" หรือ ถ้ามีมากกว่า 1 ให้ใช้ ",")'
@@ -704,7 +705,7 @@ if st.session_state.active_calc_tab == TABS_LIST[0]:
     st.text_input(
         "10. เลขที่คำขอยื่นสิทธิบัตร/อนุสิทธิบัตร 👉 [กรอกข้อมูล]",
         
-        key="wid_meta_patent_id",
+        value=st.session_state.get("meta_patent_id", ""), key="wid_meta_patent_id",
         on_change=sync_project_meta,
         placeholder="ตัวอย่าง: BTT028/2560 (LCA-NT-2560-3304-TH)",
         help='เลขที่คำขอยื่นสิทธิบัตร/อนุสิทธิบัตร (ถ้าไม่มี ให้ระบุว่า "ไม่มี" หรือ ถ้ามีมากกว่า 1 ให้ใช้ ",")'
@@ -767,7 +768,7 @@ elif st.session_state.active_calc_tab == TABS_LIST[1]:
             )
             b6_label = st.selectbox(
                 "กิจกรรมส่งมอบหลักของผลงาน (b6) 👉 [กรอกข้อมูล]", 
-                options=COEFF_LABELS, key="val_b6", on_change=sync_val, args=('b6',),
+                options=COEFF_LABELS, index=COEFF_LABELS.index(_pv('b6', COEFF_LABELS[0])) if _pv('b6', COEFF_LABELS[0]) in COEFF_LABELS else 0, key="val_b6", on_change=sync_val, args=('b6',),
                 help="สัมประสิทธิ์น้ำหนักประเภทกิจกรรมส่งมอบของ สวทช."
             )
             b6 = COEFF_OPTIONS[b6_label]
@@ -794,7 +795,7 @@ elif st.session_state.active_calc_tab == TABS_LIST[1]:
             c5 = (c3 - c4) - (c1 - c2)
             st.info(f"✨ [คำนวณอัตโนมัติ] กำไรสุทธิส่วนเพิ่มที่เกิดขึ้น (c5) = (c3 - c4) - (c1 - c2): **{c5:,.2f} บาท**")
             
-            c6_label = st.selectbox("กิจกรรมส่งมอบหลักของผลงาน (c6) 👉 [กรอกข้อมูล]", options=COEFF_LABELS, key="val_c6", on_change=sync_val, args=('c6',), help="สัมประสิทธิ์กิจกรรมส่งมอบ สวทช.")
+            c6_label = st.selectbox("กิจกรรมส่งมอบหลักของผลงาน (c6) 👉 [กรอกข้อมูล]", options=COEFF_LABELS, index=COEFF_LABELS.index(_pv('c6', COEFF_LABELS[0])) if _pv('c6', COEFF_LABELS[0]) in COEFF_LABELS else 0, key="val_c6", on_change=sync_val, args=('c6',), help="สัมประสิทธิ์กิจกรรมส่งมอบ สวทช.")
             c6 = COEFF_OPTIONS[c6_label]
             c7 = st.number_input("สัดส่วนน้ำหนักการมีส่วนร่วมของ สวทช. (%) (c7) 👉 [กรอกข้อมูล]", min_value=0.0, max_value=100.0, key="val_c7", on_change=sync_val, args=('c7',), help="เปอร์เซ็นต์ส่วนร่วมของ สวทช. (Contribution)")
             
@@ -813,7 +814,7 @@ elif st.session_state.active_calc_tab == TABS_LIST[1]:
             d3 = d1 - d2
             st.info(f"✨ [คำนวณอัตโนมัติ] รายจ่ายที่ลดลงได้ (d3) = d1 - d2: **{d3:,.2f} บาท**")
             
-            d4_label = st.selectbox("กิจกรรมส่งมอบหลักของผลงาน (d4) 👉 [กรอกข้อมูล]", options=COEFF_LABELS, key="val_d4", on_change=sync_val, args=('d4',))
+            d4_label = st.selectbox("กิจกรรมส่งมอบหลักของผลงาน (d4) 👉 [กรอกข้อมูล]", options=COEFF_LABELS, index=COEFF_LABELS.index(_pv('d4', COEFF_LABELS[0])) if _pv('d4', COEFF_LABELS[0]) in COEFF_LABELS else 0, key="val_d4", on_change=sync_val, args=('d4',))
             d4 = COEFF_OPTIONS[d4_label]
             d5 = st.number_input("สัดส่วนน้ำหนักการมีส่วนร่วมของ สวทช. (%) (d5) 👉 [กรอกข้อมูล]", min_value=0.0, max_value=100.0, key="val_d5", on_change=sync_val, args=('d5',))
             
@@ -840,7 +841,7 @@ elif st.session_state.active_calc_tab == TABS_LIST[1]:
             st.info(f"✨ [คำนวณอัตโนมัติ] เวลาที่ประหยัดได้ต่อครั้ง (e8) = e6 - e7: **{e8:,.2f} นาที**")
             
             e9 = st.number_input("ความถี่ในการปฏิบัติภารกิจต่อปี (e9) 👉 [กรอกข้อมูล]", min_value=0.0, step=1.0, key="val_e9", on_change=sync_val, args=('e9',), help="จำนวนครั้งในการดำเนินภารกิจนี้ทั้งหมดรวมตลอดปี")
-            e10_label = st.selectbox("กิจกรรมส่งมอบหลักของผลงาน (e10) 👉 [กรอกข้อมูล]", options=COEFF_LABELS, key="val_e10", on_change=sync_val, args=('e10',))
+            e10_label = st.selectbox("กิจกรรมส่งมอบหลักของผลงาน (e10) 👉 [กรอกข้อมูล]", options=COEFF_LABELS, index=COEFF_LABELS.index(_pv('e10', COEFF_LABELS[0])) if _pv('e10', COEFF_LABELS[0]) in COEFF_LABELS else 0, key="val_e10", on_change=sync_val, args=('e10',))
             e10 = COEFF_OPTIONS[e10_label]
             e11 = st.number_input("สัดส่วนน้ำหนักการมีส่วนร่วมของ สวทช. (%) (e11) 👉 [กรอกข้อมูล]", min_value=0.0, max_value=100.0, key="val_e11", on_change=sync_val, args=('e11',))
             
@@ -857,7 +858,7 @@ elif st.session_state.active_calc_tab == TABS_LIST[1]:
             f1 = st.number_input("มูลค่าของความเสียหายทางตรงเฉลี่ยต่อปี (f1) 👉 [กรอกข้อมูล]", min_value=0.0, step=1000.0, key="val_f1", on_change=sync_val, args=('f1',), help="มูลค่าค่าปรับ/ความเสียหายของอุปกรณ์/ผลผลิตในกรณีเกิดเหตุการณ์ล้มเหลว")
             f2 = st.number_input("ระดับโอกาสความน่าจะเป็นที่จะเกิดการสูญเสีย (%) (f2) 👉 [กรอกข้อมูล]", min_value=0.0, max_value=100.0, key="val_f2", on_change=sync_val, args=('f2',), help="ความน่าจะเป็นในการเกิดภัยพิบัติหรือความล้มเหลวเดิม")
             f3 = st.number_input("สัดส่วนความเสียหายที่สามารถป้องกันได้ (%) (f3) 👉 [กรอกข้อมูล]", min_value=0.0, max_value=100.0, key="val_f3", on_change=sync_val, args=('f3',), help="สัญญานเตือนภัย/ระบบตรวจจับช่วยลดโอกาสความรุนแรงลงไปกี่ %")
-            f4_label = st.selectbox("กิจกรรมส่งมอบหลักของผลงาน (f4) 👉 [กรอกข้อมูล]", options=COEFF_LABELS, key="val_f4", on_change=sync_val, args=('f4',))
+            f4_label = st.selectbox("กิจกรรมส่งมอบหลักของผลงาน (f4) 👉 [กรอกข้อมูล]", options=COEFF_LABELS, index=COEFF_LABELS.index(_pv('f4', COEFF_LABELS[0])) if _pv('f4', COEFF_LABELS[0]) in COEFF_LABELS else 0, key="val_f4", on_change=sync_val, args=('f4',))
             f4 = COEFF_OPTIONS[f4_label]
             f5 = st.number_input("สัดส่วนน้ำหนักการมีส่วนร่วมของ สวทช. (%) (f5) 👉 [กรอกข้อมูล]", min_value=0.0, max_value=100.0, key="val_f5", on_change=sync_val, args=('f5',))
             
@@ -873,7 +874,7 @@ elif st.session_state.active_calc_tab == TABS_LIST[1]:
             st.markdown("<h4 style='color: #3b82f6;'>หมวด G: พัฒนาสมรรถนะทักษะบุคลากร</h4>", unsafe_allow_html=True)
             g1 = st.number_input("จำนวนบุคลากรภายนอกที่ผ่านหลักสูตรการฝึกอบรม (g1) 👉 [กรอกข้อมูล]", min_value=0.0, step=1.0, key="val_g1", on_change=sync_val, args=('g1',), help="จำนวนผู้เข้าร่วมอบรมทั้งหมด")
             g2 = st.number_input("มูลค่าคอร์สอบรมหลักสูตรใกล้เคียงในตลาด (g2) 👉 [กรอกข้อมูล]", min_value=0.0, step=100.0, key="val_g2", on_change=sync_val, args=('g2',), help="เทียบเคียงจากราคาคอร์สเอกชนหรือผู้เชี่ยวชาญอื่นต่อหัว")
-            g3_label = st.selectbox("กิจกรรมส่งมอบหลักของผลงาน (g3) 👉 [กรอกข้อมูล]", options=COEFF_LABELS, key="val_g3", on_change=sync_val, args=('g3',))
+            g3_label = st.selectbox("กิจกรรมส่งมอบหลักของผลงาน (g3) 👉 [กรอกข้อมูล]", options=COEFF_LABELS, index=COEFF_LABELS.index(_pv('g3', COEFF_LABELS[0])) if _pv('g3', COEFF_LABELS[0]) in COEFF_LABELS else 0, key="val_g3", on_change=sync_val, args=('g3',))
             g3 = COEFF_OPTIONS[g3_label]
             g4 = st.number_input("สัดส่วนน้ำหนักการมีส่วนร่วมของ สวทช. (%) (g4) 👉 [กรอกข้อมูล]", min_value=0.0, max_value=100.0, key="val_g4", on_change=sync_val, args=('g4',))
             
@@ -888,7 +889,7 @@ elif st.session_state.active_calc_tab == TABS_LIST[1]:
         with st.container(border=True):
             st.markdown("<h4 style='color: #3b82f6;'>หมวด K: [Impact] อื่น ๆ เปรียบเทียบสิ่งที่เกิดขึ้นก่อน-หลังใช้ผลงานวิจัย</h4>", unsafe_allow_html=True)
             k1 = st.number_input("มูลค่า...(ระบุ)... (k1) 👉 [กรอกข้อมูล]", min_value=0.0, step=1000.0, key="val_k1", on_change=sync_val, args=('k1',), help="ระบุมูลค่าส่วนต่างที่ได้ทำการประเมินเพิ่มเติม")
-            k2_label = st.selectbox("กิจกรรมส่งมอบหลักของผลงาน (k2) 👉 [กรอกข้อมูล]", options=COEFF_LABELS, key="val_k2", on_change=sync_val, args=('k2',))
+            k2_label = st.selectbox("กิจกรรมส่งมอบหลักของผลงาน (k2) 👉 [กรอกข้อมูล]", options=COEFF_LABELS, index=COEFF_LABELS.index(_pv('k2', COEFF_LABELS[0])) if _pv('k2', COEFF_LABELS[0]) in COEFF_LABELS else 0, key="val_k2", on_change=sync_val, args=('k2',))
             k2 = COEFF_OPTIONS[k2_label]
             k3 = st.number_input("Contribution (จากผู้รับบริการ) (%) (k3) 👉 [กรอกข้อมูล]", min_value=0.0, max_value=100.0, key="val_k3", on_change=sync_val, args=('k3',))
             k4 = k1 * k2 * (k3 / 100.0)
@@ -920,7 +921,7 @@ elif st.session_state.active_calc_tab == TABS_LIST[2]:
         with st.container(border=True):
             st.markdown("<h4 style='color: #f59e0b;'>หมวด H: การลงทุนเพื่อวิจัยและพัฒนาต่อยอด</h4>", unsafe_allow_html=True)
             h1 = st.number_input("มูลค่าการลงทุนวิจัยต่อยอดโดยตรง (h1) 👉 [กรอกข้อมูล]", min_value=0.0, step=1000.0, key="val_h1", on_change=sync_val, args=('h1',), help="เงินร่วมทุนวิจัยเพิ่มของลูกค้าเพื่อต่อยอดผลิตภัณฑ์")
-            h2_label = st.selectbox("กิจกรรมส่งมอบหลักของผลงาน (h2) 👉 [กรอกข้อมูล]", options=COEFF_LABELS, key="val_h2", on_change=sync_val, args=('h2',))
+            h2_label = st.selectbox("กิจกรรมส่งมอบหลักของผลงาน (h2) 👉 [กรอกข้อมูล]", options=COEFF_LABELS, index=COEFF_LABELS.index(_pv('h2', COEFF_LABELS[0])) if _pv('h2', COEFF_LABELS[0]) in COEFF_LABELS else 0, key="val_h2", on_change=sync_val, args=('h2',))
             h2 = COEFF_OPTIONS[h2_label]
             h3 = st.number_input("สัดส่วนน้ำหนักการมีส่วนร่วมของ สวทช. (%) (h3) 👉 [กรอกข้อมูล]", min_value=0.0, max_value=100.0, key="val_h3", on_change=sync_val, args=('h3',))
             
@@ -935,7 +936,7 @@ elif st.session_state.active_calc_tab == TABS_LIST[2]:
         with st.container(border=True):
             st.markdown("<h4 style='color: #f59e0b;'>หมวด I: ลงทุนเพิ่มเติมในระบบการผลิต</h4>", unsafe_allow_html=True)
             i1 = st.number_input("มูลค่าจัดซื้อเครื่องจักร/ปรับสายการผลิต (i1) 👉 [กรอกข้อมูล]", min_value=0.0, step=1000.0, key="val_i1", on_change=sync_val, args=('i1',), help="มูลค่าเครื่องจักรหรือการปรับแต่งโรงงานเพื่อรองรับการใช้งานผลงานวิจัย")
-            i2_label = st.selectbox("กิจกรรมส่งมอบหลักของผลงาน (i2) 👉 [กรอกข้อมูล]", options=COEFF_LABELS, key="val_i2", on_change=sync_val, args=('i2',))
+            i2_label = st.selectbox("กิจกรรมส่งมอบหลักของผลงาน (i2) 👉 [กรอกข้อมูล]", options=COEFF_LABELS, index=COEFF_LABELS.index(_pv('i2', COEFF_LABELS[0])) if _pv('i2', COEFF_LABELS[0]) in COEFF_LABELS else 0, key="val_i2", on_change=sync_val, args=('i2',))
             i2 = COEFF_OPTIONS[i2_label]
             i3 = st.number_input("สัดส่วนน้ำหนักการมีส่วนร่วมของ สวทช. (%) (i3) 👉 [กรอกข้อมูล]", min_value=0.0, max_value=100.0, key="val_i3", on_change=sync_val, args=('i3',))
             
@@ -951,7 +952,7 @@ elif st.session_state.active_calc_tab == TABS_LIST[2]:
             st.markdown("<h4 style='color: #f59e0b;'>หมวด J: ร่วมลงทุนจ้างงานบุคลากรใหม่</h4>", unsafe_allow_html=True)
             j1 = st.number_input("อัตราเงินเดือนค่าจ้างบุคลากรเพิ่มรวมต่อปี (j1) 👉 [กรอกข้อมูล]", min_value=0.0, step=1000.0, key="val_j1", on_change=sync_val, args=('j1',), help="ยอดรวมเงินเดือนที่ลูกค้าจ่ายเพิ่มขึ้นให้กับพนักงานใหม่ที่เข้ามาคุมงานระบบวิจัย")
             j2 = st.number_input("สัดส่วนเวลาการปฏิบัติภารกิจเกี่ยวข้องตรง (%) (j2) 👉 [กรอกข้อมูล]", min_value=0.0, max_value=100.0, key="val_j2", on_change=sync_val, args=('j2',), help="สัดส่วนเวลา (FTE) ของผู้ว่าจ้างที่เกี่ยวข้องกับการคุมระบบวิจัย")
-            j3_label = st.selectbox("กิจกรรมส่งมอบหลักของผลงาน (j3) 👉 [กรอกข้อมูล]", options=COEFF_LABELS, key="val_j3", on_change=sync_val, args=('j3',))
+            j3_label = st.selectbox("กิจกรรมส่งมอบหลักของผลงาน (j3) 👉 [กรอกข้อมูล]", options=COEFF_LABELS, index=COEFF_LABELS.index(_pv('j3', COEFF_LABELS[0])) if _pv('j3', COEFF_LABELS[0]) in COEFF_LABELS else 0, key="val_j3", on_change=sync_val, args=('j3',))
             j3 = COEFF_OPTIONS[j3_label]
             j4 = st.number_input("สัดส่วนน้ำหนักการมีส่วนร่วมของ สวทช. (%) (j4) 👉 [กรอกข้อมูล]", min_value=0.0, max_value=100.0, key="val_j4", on_change=sync_val, args=('j4',))
             
