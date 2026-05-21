@@ -87,8 +87,10 @@ def load_drafts(employee_id):
             if "saved_at" in d and d["saved_at"]:
                 # Convert firestore datetime to formatted string
                 try:
-                    d["saved_at"] = d["saved_at"].strftime("%Y-%m-%d %H:%M:%S")
-                except AttributeError:
+                    dt = d["saved_at"]
+                    if hasattr(dt, "to_datetime"): dt = dt.to_datetime()
+                    d["saved_at"] = dt.strftime("%Y-%m-%d %H:%M:%S")
+                except Exception:
                     d["saved_at"] = str(d["saved_at"])
             else:
                 d["saved_at"] = "-"
@@ -97,6 +99,40 @@ def load_drafts(employee_id):
     except Exception as e:
         print(f"Firestore load_drafts error: {e}")
         return []
+
+def load_user_evaluations(employee_id):
+    """
+    Loads all submitted evaluations for a specific employee ID
+    """
+    if not db:
+        return []
+    try:
+        docs = db.collection("evaluations").where("employee_id", "==", employee_id).order_by("submitted_at", direction=firestore.Query.DESCENDING).stream()
+        evals = []
+        for doc in docs:
+            d = doc.to_dict()
+            d["id"] = doc.id
+            if "submitted_at" in d and d["submitted_at"]:
+                try:
+                    dt = d["submitted_at"]
+                    if hasattr(dt, "to_datetime"): dt = dt.to_datetime()
+                    d["submitted_at_str"] = dt.strftime("%Y-%m-%d %H:%M:%S")
+                except Exception:
+                    d["submitted_at_str"] = str(d["submitted_at"])
+            else:
+                d["submitted_at_str"] = "-"
+            evals.append(d)
+        return evals
+    except Exception as e:
+        print(f"Firestore load_user_evaluations error: {e}")
+        # Fallback to unsorted if index missing
+        try:
+            docs = db.collection("evaluations").where("employee_id", "==", employee_id).stream()
+            evals = [doc.to_dict() for doc in docs]
+            for i, ev in enumerate(evals): ev["id"] = list(docs)[i].id
+            return evals
+        except:
+            return []
 
 def delete_draft(draft_id):
     """

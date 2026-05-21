@@ -98,45 +98,86 @@ else:
     else:
         st.sidebar.markdown("<div style='font-size: 0.75rem; color: #ef4444; margin-bottom: 0.5rem;'>🔴 ไม่พบการเชื่อมต่อ Firebase (ทำงานในระบบ Local)</div>", unsafe_allow_html=True)
 
-    # ── QUICK LOAD DRAFT (sidebar) ──────────────────────────────────────────
+    # ── HISTORY & DRAFTS (sidebar) ──────────────────────────────────────────
     if firebase_config.is_db_connected():
         st.sidebar.markdown("---")
-        st.sidebar.markdown("<div style='font-size:0.8rem; font-weight:700; color:#818cf8; margin-bottom:0.5rem;'>📂 โหลดแบบร่างของฉัน</div>", unsafe_allow_html=True)
+        st.sidebar.markdown("<div style='font-size:0.8rem; font-weight:700; color:#818cf8; margin-bottom:0.5rem;'>📂 ประวัติงานของฉัน (My History)</div>", unsafe_allow_html=True)
         
+        # Load both Drafts and Evaluations
         drafts = firebase_config.load_drafts(st.session_state.employee_id)
-        if drafts:
-            draft_labels = {f"📄 {d['project_id']} — {d['project_name']}": d for d in drafts}
-            selected = st.sidebar.selectbox(
-                "เลือกแบบร่าง:",
-                ["— เลือก —"] + list(draft_labels.keys()),
-                key="sidebar_draft_selector",
+        evals = firebase_config.load_user_evaluations(st.session_state.employee_id)
+        
+        options_map = {}
+        for d in drafts:
+            label = f"📝 [ร่าง] {d['project_id']} — {d['project_name']}"
+            options_map[label] = {"data": d, "type": "draft"}
+        for e in evals:
+            label = f"✅ [ส่งแล้ว] {e['project_id']} — {e['project_name']}"
+            options_map[label] = {"data": e, "type": "evaluation"}
+            
+        if options_map:
+            selected_label = st.sidebar.selectbox(
+                "เลือกรายการเพื่อโหลดใหม่:",
+                ["— เลือกรายการ —"] + list(options_map.keys()),
+                key="sidebar_history_selector",
                 label_visibility="collapsed"
             )
-            if selected != "— เลือก —":
-                draft_data = draft_labels[selected]
-                if st.sidebar.button("🔄 โหลดแบบร่างนี้", use_container_width=True, key="sidebar_load_btn", type="primary"):
-                    st.session_state.projectId   = draft_data.get("project_id", "")
-                    st.session_state.projectName  = draft_data.get("project_name", "")
-                    st.session_state.reportType   = draft_data.get("report_type", "รายปี")
+            
+            if selected_label != "— เลือกรายการ —":
+                selection = options_map[selected_label]
+                item_data = selection["data"]
+                
+                if st.sidebar.button("🔄 โหลดข้อมูลนี้", use_container_width=True, key="sidebar_load_btn", type="primary"):
+                    # DEBUG: Trace the data coming from Firestore
+                    try:
+                        with open("firestore_debug.log", "a", encoding="utf-8") as f:
+                            f.write(f"\n--- LOADING {selection['type'].upper()} ---\n")
+                            f.write(f"Project ID: {item_data.get('project_id')}\n")
+                            f.write(f"Fields found: {list(item_data.get('fields', {}).keys())}\n")
+                    except: pass
+
+                    st.session_state.projectId   = item_data.get("project_id", "")
+                    st.session_state.projectName  = item_data.get("project_name", "")
+                    st.session_state.reportType   = item_data.get("report_type", "รายปี")
                     
                     # Metadata fields
-                    st.session_state.meta_krrn         = draft_data.get("meta_krrn", "")
-                    st.session_state.meta_krid         = draft_data.get("meta_krid", "")
-                    st.session_state.meta_krrn_related = draft_data.get("meta_krrn_related", "")
-                    st.session_state.meta_patent_id    = draft_data.get("meta_patent_id", "")
+                    st.session_state.meta_krrn         = item_data.get("meta_krrn", "")
+                    st.session_state.meta_krid         = item_data.get("meta_krid", "")
+                    st.session_state.meta_krrn_related = item_data.get("meta_krrn_related", "")
+                    st.session_state.meta_patent_id    = item_data.get("meta_patent_id", "")
                     
-                    sections = draft_data.get("sections", {})
+                    # Handle section checkboxes
+                    sections = item_data.get("sections", {})
+                    if selection["type"] == "evaluation":
+                        # If it was a submission, we need to map the list back to checkboxes
+                        checked_list = item_data.get("sections_checked", [])
+                        sections = {s: (s in checked_list) for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']}
+                    
                     for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
                         st.session_state[f"chk_{s}"] = sections.get(s, False)
                         st.session_state[f"_p_chk_{s}"] = sections.get(s, False)
-                    fields = draft_data.get("fields", {})
+                        
+                    # Handle field values
+                    fields = item_data.get("fields", {})
+                    if selection["type"] == "evaluation":
+                        # If it was a submission, map the individual impact fields back to inputs
+                        # Note: This is a partial restoration since evaluation doesn't store all raw inputs,
+                        # but we can try to restore the main ones if they were saved in the evaluation payload.
+                        # For now, we trust the 'fields' dict if it exists.
+                        pass
+                    
                     for k, v in fields.items():
                         st.session_state[f"val_{k}"] = v
-                        st.session_state[f"_p_{k}"] = v
-                    st.sidebar.success(f"✅ โหลด '{draft_data.get('project_id','')}' แล้ว!")
+                        st.session_state[f"_p_val_{k}"] = v
+                        
+                    # Switch to Calculator page and first tab
+                    target_tab = "📋 1. ข้อมูลโครงการ (Details)"
+                    st.session_state.active_calc_tab = target_tab
+                    st.session_state.segmented_calc_tab = target_tab
+                    st.sidebar.success(f"✅ โหลดข้อมูลสำเร็จ! กรุณาไปที่หน้าเครื่องประเมิน")
                     st.rerun()
         else:
-            st.sidebar.caption("ยังไม่มีแบบร่างที่บันทึกไว้")
+            st.sidebar.caption("ยังไม่มีประวัติการบันทึกหรือส่งรายงาน")
 
     # 6. Page Routing
     pages = [

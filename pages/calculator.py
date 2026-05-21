@@ -882,6 +882,23 @@ elif st.session_state.active_calc_tab == TABS_LIST[4]:
         elif total_impact == 0 and total_investment == 0:
             st.error("❌ มูลค่าผลลัพธ์การประเมินเป็น 0 บาท กรุณากรอกข้อมูลในมิติต่าง ๆ ในแท็บ 2 หรือ 3 อย่างน้อยหนึ่งหมวด")
         else:
+            # Collect full states for potential restoration later
+            sections_dict = {s: _pc(s) for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']}
+            fields_dict = {}
+            for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
+                if s == 'B': f_ids = ['b1', 'b2', 'b4', 'b5', 'b6', 'b7']
+                elif s == 'C': f_ids = ['c1', 'c2', 'c3', 'c4', 'c6', 'c7']
+                elif s == 'D': f_ids = ['d1', 'd2', 'd4', 'd5']
+                elif s == 'E': f_ids = ['e1', 'e2', 'e6', 'e7', 'e9', 'e10', 'e11']
+                elif s == 'F': f_ids = ['f1', 'f2', 'f3', 'f4', 'f5']
+                elif s == 'G': f_ids = ['g1', 'g2', 'g3', 'g4']
+                elif s == 'H': f_ids = ['h1', 'h2', 'h3']
+                elif s == 'I': f_ids = ['i1', 'i2', 'i3']
+                elif s == 'J': f_ids = ['j1', 'j2', 'j3', 'j4']
+                elif s == 'K': f_ids = ['k1', 'k2', 'k3']
+                for fid in f_ids:
+                    fields_dict[fid] = _pv(fid, FIELD_DEFAULTS.get(fid, 0.0))
+
             # Payload formulation
             eval_payload = {
                 "employee_id": st.session_state.employee_id,
@@ -895,6 +912,8 @@ elif st.session_state.active_calc_tab == TABS_LIST[4]:
                 "meta_patent_id": st.session_state.meta_patent_id,
                 "total_impact": total_impact,
                 "total_investment": total_investment,
+                "sections": sections_dict,
+                "fields": fields_dict,
                 "sections_checked": [s for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K'] if _pc(s)],
                 "b8_impact": results.get("B", 0.0),
                 "c8_impact": results.get("C", 0.0),
