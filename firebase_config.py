@@ -67,6 +67,7 @@ def save_draft(employee_id, project_id, draft_data):
             "meta_krid": draft_data.get("meta_krid", ""),
             "meta_krrn_related": draft_data.get("meta_krrn_related", ""),
             "meta_patent_id": draft_data.get("meta_patent_id", ""),
+            "chk_b5_text": draft_data.get("chk_b5_text", ""),
             "sections": draft_data.get("sections", {}),
             "fields": draft_data.get("fields", {}),
             "saved_at": firestore.SERVER_TIMESTAMP
@@ -132,10 +133,14 @@ def load_user_evaluations(employee_id):
         # Fallback to unsorted if index missing
         try:
             docs = db.collection("evaluations").where("employee_id", "==", employee_id).stream()
-            evals = [doc.to_dict() for doc in docs]
-            for i, ev in enumerate(evals): ev["id"] = list(docs)[i].id
+            evals = []
+            for doc in docs:
+                d = doc.to_dict()
+                d["id"] = doc.id
+                evals.append(d)
             return evals
-        except:
+        except Exception as inner_e:
+            print(f"Firestore load_user_evaluations fallback error: {inner_e}")
             return []
 
 def delete_draft(draft_id):
