@@ -269,14 +269,9 @@ def get_tab_keys(tab_name):
     return [], []
 
 def snapshot_tab(tab_name):
-    """Saves the current active tab's widget values to persistent shadow keys."""
-    w_keys, p_keys = get_tab_keys(tab_name)
-    for w_key, p_key in zip(w_keys, p_keys):
-        if w_key in st.session_state:
-            val = st.session_state[w_key]
-            # ONLY update if value is not None (Streamlit might send None during switch)
-            if val is not None:
-                st.session_state[p_key] = val
+    """(Deprecated) Relies entirely on on_change callbacks now to avoid race conditions."""
+    pass
+
 
 def snapshot_state():
     """Manual fallback to save active tab's states and trigger autosave."""
