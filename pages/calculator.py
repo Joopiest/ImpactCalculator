@@ -915,10 +915,30 @@ elif st.session_state.active_calc_tab == TABS_LIST[3]:
     krrn_rel_val = st.session_state.get("meta_krrn_related", "").strip()
     patent_val = st.session_state.get("meta_patent_id", "").strip()
     
+    # --- Generate Detail Rows ---
+    detail_rows = ""
+    sections = [
+        ('B', 'ลดการนำเข้า (Import Substitution)', current_results.get('B', 0.0), 't-impact'),
+        ('C', 'เพิ่มการส่งออก (Export Increase)', current_results.get('C', 0.0), 't-impact'),
+        ('D', 'ลดต้นทุนการผลิต/บริการ (Cost Reduction)', current_results.get('D', 0.0), 't-impact'),
+        ('E', 'เพิ่มประสิทธิภาพการผลิต (Productivity)', current_results.get('E', 0.0), 't-impact'),
+        ('F', 'ลดความสูญเสีย (Loss Reduction)', current_results.get('F', 0.0), 't-impact'),
+        ('G', 'ผลกระทบเชิงบวกต่อสิ่งแวดล้อม/สังคม', current_results.get('G', 0.0), 't-impact'),
+        ('K', 'ผลกระทบอื่นๆ (Other Impacts)', current_results.get('K', 0.0), 't-impact'),
+        ('H', 'ทุนพัฒนาโครงการ (Project Funding)', current_results.get('H', 0.0), 't-invest'),
+        ('I', 'การลงทุนของพันธมิตร (Partner Investment)', current_results.get('I', 0.0), 't-invest'),
+        ('J', 'ต้นทุนขยายผล (Deployment Cost)', current_results.get('J', 0.0), 't-invest'),
+    ]
+    
+    for s_code, s_name, s_val, s_class in sections:
+        if s_val > 0:
+            detail_rows += f'<div class="row"><span class="{s_class}">หมวด {s_code}: {s_name}</span><span>{s_val:,.2f} บาท</span></div>\n'
+    
+    if not detail_rows:
+        detail_rows = '<div class="row"><span style="color:#64748b;">ไม่มีข้อมูลการประเมิน (0.00 บาท)</span></div>\n'
+
     # --- Build full HTML report string ---
     css_link = '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;600;700&display=swap">'
-    
-    # ... (rest of CSS remains same)
     
     html_output = f"""{css_link}
 <style>
