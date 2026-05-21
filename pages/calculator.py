@@ -318,7 +318,8 @@ if not st.session_state.checklist_passed:
 # 5. Form Fields & Interactive Logic Containers
 # Synchronize state based on user interaction source (widget vs button)
 if "segmented_calc_tab" in st.session_state and st.session_state.segmented_calc_tab != st.session_state.last_active_tab:
-    # Widget was clicked
+    # Widget was clicked - force sync before switching
+    sync_project_meta()
     st.session_state.active_calc_tab = st.session_state.segmented_calc_tab
     st.session_state.last_active_tab = st.session_state.segmented_calc_tab
 elif st.session_state.active_calc_tab != st.session_state.last_active_tab:
