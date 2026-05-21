@@ -25,16 +25,19 @@ st.markdown(
                     if (input.value !== undefined && input.value !== null) {
                         const lastVal = input.getAttribute('data-last-synced') || '';
                         if (input.value !== lastVal) {
-                            const tracker = input._valueTracker;
-                            if (tracker || input.tagName === 'SELECT' || input.type === 'checkbox' || input.type === 'radio') {
-                                input.setAttribute('data-last-synced', input.value);
-                                if (tracker) {
-                                    tracker.setValue(lastVal);
+                            input.setAttribute('data-last-synced', input.value);
+                            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
+                            if (nativeInputValueSetter && nativeInputValueSetter.set && input.tagName === 'INPUT' && input.type !== 'checkbox' && input.type !== 'radio') {
+                                nativeInputValueSetter.set.call(input, input.value);
+                            } else if (input.tagName === 'TEXTAREA') {
+                                const nativeTextAreaValueSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value');
+                                if (nativeTextAreaValueSetter && nativeTextAreaValueSetter.set) {
+                                    nativeTextAreaValueSetter.set.call(input, input.value);
                                 }
-                                input.dispatchEvent(new Event('input', { bubbles: true }));
-                                input.dispatchEvent(new Event('change', { bubbles: true }));
-                                input.dispatchEvent(new Event('blur', { bubbles: true }));
                             }
+                            input.dispatchEvent(new Event('input', { bubbles: true }));
+                            input.dispatchEvent(new Event('change', { bubbles: true }));
+                            input.dispatchEvent(new Event('blur', { bubbles: true }));
                         }
                     }
                 });
@@ -450,7 +453,7 @@ elif st.session_state.active_calc_tab != old_tab:
 if detected_change:
     # Callbacks already saved widget values to shadow keys + Firestore,
     # so we just need to snapshot any remaining unsaved widget state.
-    snapshot_tab(old_tab)
+    # snapshot_tab(old_tab)  # Disabled to prevent overwriting persistent keys with stale widget keys
     # Extra safety: ensure cloud is up to date
     autosave_to_cloud()
     
