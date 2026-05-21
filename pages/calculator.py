@@ -189,62 +189,8 @@ def sync_project_meta():
         last_loaded = st.session_state.get("last_loaded_projectId", "")
         if proj_id != last_loaded:
             st.session_state["last_loaded_projectId"] = proj_id
-            if firebase_config.is_db_connected():
-                drafts = firebase_config.load_drafts(emp_id)
-                matching_draft = None
-                for d in drafts:
-                    if d.get("project_id", "").strip() == proj_id:
-                        matching_draft = d
-                        break
-                if matching_draft:
-                    # Restore draft values to session state
-                    st.session_state.projectName = matching_draft.get("project_name", "")
-                    st.session_state.reportType = matching_draft.get("report_type", "รายปี")
-                    st.session_state.meta_krrn = matching_draft.get("meta_krrn", "")
-                    st.session_state.meta_krid = matching_draft.get("meta_krid", "")
-                    st.session_state.meta_krrn_related = matching_draft.get("meta_krrn_related", "")
-                    st.session_state.meta_patent_id = matching_draft.get("meta_patent_id", "")
-                    
-                    # Sync widget keys to match
-                    st.session_state["wid_projectId"] = proj_id
-                    st.session_state["wid_projectName"] = st.session_state.projectName
-                    st.session_state["wid_reportType"] = st.session_state.reportType
-                    st.session_state["wid_meta_krrn"] = st.session_state.meta_krrn
-                    st.session_state["wid_meta_krid"] = st.session_state.meta_krid
-                    st.session_state["wid_meta_krrn_related"] = st.session_state.meta_krrn_related
-                    st.session_state["wid_meta_patent_id"] = st.session_state.meta_patent_id
-                    
-                    # Bypass checklist lockout
-                    st.session_state.checklist_passed = True
-                    st.session_state.checklist_data = {
-                        "chk_a1": True, "chk_a2": False, "chk_b1": True, "chk_b2": False,
-                        "chk_b3": False, "chk_b4": False, "chk_b5": False, "chk_b5_text": ""
-                    }
-                    st.session_state.chk_a1 = True
-                    st.session_state.chk_a2 = False
-                    st.session_state.chk_b1 = True
-                    st.session_state.chk_b2 = False
-                    st.session_state.chk_b3 = False
-                    st.session_state.chk_b4 = False
-                    st.session_state.chk_b5 = False
-                    st.session_state.chk_b5_text = ""
-                    
-                    # Restoring checkbox toggles (only shadow keys)
-                    sections = matching_draft.get("sections", {})
-                    for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
-                        val_s = sections.get(s, False)
-                        st.session_state[f"_p_chk_{s}"] = val_s
-                        
-                    # Restoring fields (only shadow keys)
-                    fields = matching_draft.get("fields", {})
-                    for k, v in FIELD_DEFAULTS.items():
-                        loaded_val = fields.get(k, v)
-                        st.session_state[f"_p_val_{k}"] = loaded_val
-                        
-                    # Map only active tab's widget keys
-                    restore_tab(st.session_state.active_calc_tab)
-                        
-                    st.toast(f"🔄 โหลดแบบร่างโครงการ {proj_id} จาก Firestore อัตโนมัติ!")
+            # Force cloud fetch for this ID
+            cloud_load_on_startup(force=True)
                     
     # Trigger autosave to cloud for extra safety
     autosave_to_cloud()
@@ -285,8 +231,9 @@ def autosave_to_cloud():
         proj_id = st.session_state.get("projectId", "").strip()
         emp_id = st.session_state.get("employee_id", "").strip()
         if proj_id and emp_id:
+            # Force snapshot of active tab before saving
+            snapshot_tab(st.session_state.active_calc_tab)
             payload = get_current_state_payload()
-            # Background save to avoid UI lag (Firestore SDK is async-friendly but we use sync here for simplicity)
             firebase_config.save_draft(emp_id, proj_id, payload)
 
 def get_tab_keys(tab_name):
@@ -405,18 +352,21 @@ elif st.session_state.active_calc_tab != old_tab:
     target_tab = st.session_state.active_calc_tab
 
 if detected_change:
-    # Save the OLD tab's widgets before they disappear
+    # IMPORTANT: Save the OLD tab's widgets before they disappear from session state
     snapshot_tab(old_tab)
-    autosave_to_cloud()
     
+    # Update all active tab markers
     st.session_state.active_calc_tab = target_tab
     st.session_state.segmented_calc_tab = target_tab
     st.session_state.last_active_tab = target_tab
     
-    # Restore the NEW tab's widgets from shadow keys
+    # Backup the now-updated shadow keys to the cloud immediately
+    autosave_to_cloud()
+    
+    # Prepare the NEW tab's widget keys so they show the correct values
     restore_tab(target_tab)
 else:
-    # Rerun on same tab: keep widget keys in sync with shadow keys
+    # Continuous sync while on the same tab
     restore_tab(st.session_state.active_calc_tab)
 
 def _pv(key, default=0.0):
