@@ -31,7 +31,8 @@ TABS_LIST = [
     "📋 1. ข้อมูลโครงการ (Details)", 
     "📈 2. มิติผลกระทบ (Pre-Impact)", 
     "💰 3. มิติร่วมลงทุน (Pre-Investment)", 
-    "💾 4. ส่งรายงาน & แบบร่าง (Submit & Drafts)"
+    "📄 4. สรุปผลและพิมพ์ (Summary & Print)",
+    "💾 5. ส่งรายงาน & แบบร่าง (Submit & Drafts)"
 ]
 
 # 3. Field defaults (module-level for reuse in snapshot/restore)
@@ -624,8 +625,87 @@ elif st.session_state.active_calc_tab == TABS_LIST[2]:
         st.session_state.active_calc_tab = TABS_LIST[3]
         st.rerun()
 
-# ==================== TAB 4: SUBMIT & DRAFTS ====================
+# ==================== TAB 4: SUMMARY & PRINT ====================
 elif st.session_state.active_calc_tab == TABS_LIST[3]:
+    st.markdown("### 📄 สรุปผลการประเมิน (Summary Report)")
+    
+    current_results = compute_results()
+    total_impact = sum([current_results.get(s, 0.0) for s in ['B', 'C', 'D', 'E', 'F', 'G', 'K']])
+    total_investment = sum([current_results.get(s, 0.0) for s in ['H', 'I', 'J']])
+    
+    proj_id = st.session_state.projectId.strip()
+    proj_name = st.session_state.projectName.strip()
+    
+    st.markdown(f'''
+    <div id="print-area" class="report-container">
+        <div class="report-header">
+            <div class="report-title">รายงานการประมาณการผลลัพธ์และผลกระทบโครงการวิจัย (Pre-Impact)</div>
+            <div class="report-meta">วันที่ออกรายงาน: {datetime.now().strftime('%Y-%m-%d')}</div>
+            <div class="report-meta">ผู้ประเมิน: {st.session_state.employee_id} ({st.session_state.organization})</div>
+        </div>
+        
+        <div class="report-section">
+            <h4>ข้อมูลโครงการ</h4>
+            <div class="report-row"><span class="label">รหัสโครงการ (Project ID):</span><span class="value">{proj_id or "-"}</span></div>
+            <div class="report-row"><span class="label">ชื่อโครงการ (Project Name):</span><span class="value">{proj_name or "-"}</span></div>
+            <div class="report-row"><span class="label">รูปแบบช่วงเวลาที่บันทึก:</span><span class="value">{st.session_state.reportType}</span></div>
+            <div class="report-row"><span class="label">เลขที่ KRRN ผลงาน 3P:</span><span class="value">{st.session_state.meta_krrn or 'ไม่มี'}</span></div>
+            <div class="report-row"><span class="label">เลขที่ KRID ผลงาน 3P:</span><span class="value">{st.session_state.meta_krid or 'ไม่มี'}</span></div>
+            <div class="report-row"><span class="label">เลขที่ KRRN ที่เกี่ยวข้อง:</span><span class="value">{st.session_state.meta_krrn_related or 'ไม่มี'}</span></div>
+            <div class="report-row"><span class="label">เลขที่สิทธิบัตร/อนุสิทธิบัตร:</span><span class="value">{st.session_state.meta_patent_id or 'ไม่มี'}</span></div>
+        </div>
+    ''', unsafe_allow_html=True)
+    
+    sections_map = {
+        'B': ('[Impact] ลดการนำเข้าต่างประเทศ', 'B', 'บาท'),
+        'C': ('[Impact] เพิ่มกำไร/รายได้ลูกค้า', 'C', 'บาท'),
+        'D': ('[Impact] ประหยัดค่าใช้จ่ายลูกค้า', 'D', 'บาท'),
+        'E': ('[Impact] เพิ่มประสิทธิภาพลูกค้า', 'E', 'บาท'),
+        'F': ('[Impact] ลดความรุนแรงความเสี่ยง', 'F', 'บาท'),
+        'G': ('[Impact] ทักษะบุคลากรเพิ่ม', 'G', 'บาท'),
+        'K': ('[Impact] เปรียบเทียบก่อน-หลัง', 'K', 'บาท'),
+        'H': ('[Investment] ลงทุนวิจัยต่อยอด', 'H', 'บาท'),
+        'I': ('[Investment] ลงทุนในกระบวนการผลิต', 'I', 'บาท'),
+        'J': ('[Investment] จ้างงานเพิ่ม', 'J', 'บาท'),
+    }
+    
+    st.markdown("<div class='report-section'><h4>รายละเอียดมูลค่าประเมินแยกรายหมวด</h4>", unsafe_allow_html=True)
+    for s, (title, payload_key, unit) in sections_map.items():
+        if _pc(s):
+            val = current_results.get(payload_key, 0.0)
+            st.markdown(f'<div class="report-row highlight"><span class="label">🔹 {title}:</span><span class="value">{val:,.2f} {unit}</span></div>', unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+    
+    st.markdown(f'''
+        <div class="report-total-section">
+            <div class="report-total-row impact"><span class="label">มูลค่า Pre-Impact รวมทั้งหมด:</span><span class="value">{total_impact:,.2f} บาท</span></div>
+            <div class="report-total-row investment"><span class="label">มูลค่า Pre-Investment รวมทั้งหมด:</span><span class="value">{total_investment:,.2f} บาท</span></div>
+        </div>
+    </div>
+    ''', unsafe_allow_html=True)
+    
+    st.components.v1.html('''
+        <script>
+        function triggerPrint() {
+            window.parent.postMessage("trigger_print", "*");
+        }
+        </script>
+        <button onclick="triggerPrint()" style="background-color:#10b981; color:white; padding:10px 20px; border:none; border-radius:5px; cursor:pointer; font-weight:bold; font-family: 'Noto Sans Thai', sans-serif; width: 100%;">🖨️ สั่งพิมพ์เอกสารหน้านี้ (Print PDF / A4)</button>
+    ''', height=50)
+    
+    st.info("💡 เมื่อกดปุ่มสั่งพิมพ์ ระบบจะซ่อนเมนูของหน้าเว็บอัตโนมัติเพื่อให้เอกสารออกมาสวยงาม (สามารถกด Ctrl + P ได้เช่นกัน)")
+    
+    st.markdown("---")
+    col_nav1, col_nav2 = st.columns(2)
+    if col_nav1.button("⬅️ ย้อนกลับ (Back)", key="btn_back_tab4_new", use_container_width=True):
+        st.session_state.active_calc_tab = TABS_LIST[2]
+        st.rerun()
+    if col_nav2.button("ขั้นตอนถัดไป (Next) ➡️", key="btn_next_tab4_new", use_container_width=True, type="primary"):
+        st.session_state.active_calc_tab = TABS_LIST[4]
+        st.rerun()
+
+# ==================== TAB 5: SUBMIT & DRAFTS ====================
+elif st.session_state.active_calc_tab == TABS_LIST[4]:
     st.markdown("### 💾 แผงควบคุมและจัดส่งรายงานการประเมิน")
     
     # Refresh results for Tab 4 to ensure they match current state
@@ -876,6 +956,6 @@ elif st.session_state.active_calc_tab == TABS_LIST[3]:
             st.info("💡 ท่านสามารถบันทึกหรือพิมพ์หน้ารายงานนี้ได้โดยการกดคีย์ลัด **Ctrl + P** บนคีย์บอร์ดของท่าน (ระบบได้จัดเตรียมโครงสร้างหน้าสำหรับการพิมพ์ในรูปแบบ PDF หรือกระดาษ A4 ไว้อย่างเหมาะสมแล้ว)")
 
     st.markdown("---")
-    if st.button("⬅️ ย้อนกลับ (Back)", key="btn_back_tab4", use_container_width=True):
-        st.session_state.active_calc_tab = TABS_LIST[2]
+    if st.button("⬅️ ย้อนกลับ (Back)", key="btn_back_tab5", use_container_width=True):
+        st.session_state.active_calc_tab = TABS_LIST[3]
         st.rerun()

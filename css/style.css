@@ -392,7 +392,7 @@ div[data-testid="stSegmentedControl"] button[aria-selected="true"] {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
     }
     
-    header, footer, nav, button, [data-testid="stSidebar"], [data-testid="stHeader"], .stButton, .btn-print, .report-actions {
+    header, footer, nav, button, [data-testid="stSidebar"], [data-testid="stHeader"], .stButton, .btn-print, .report-actions, [data-testid="stSegmentedControl"] {
         display: none !important;
     }
     
