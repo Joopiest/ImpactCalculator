@@ -661,7 +661,7 @@ elif st.session_state.active_calc_tab == TABS_LIST[1]:
     """)
     
     # Section B
-    sec_B = st.checkbox("B. ผู้รับบริการลดการนำเข้าจากต่างประเทศ (Import Substitution)", key="chk_B", on_change=sync_chk, args=('B',))
+    sec_B = st.checkbox("B. ผู้รับบริการลดการนำเข้าจากต่างประเทศ (Import Substitution)", key="chk_B", on_change=sync_chk, args=('B',), value=_pc('B'))
     if sec_B:
         with st.container(border=True):
             st.markdown("<h4 style='color: #3b82f6;'>หมวด B: ลดการนำเข้าจากต่างประเทศ</h4>", unsafe_allow_html=True)
@@ -706,7 +706,7 @@ elif st.session_state.active_calc_tab == TABS_LIST[1]:
             st.success(f"🏆 [คำนวณอัตโนมัติ] มูลค่า Pre-Impact หมวด B: **{b8:,.2f} บาท**")
 
     # Section C
-    sec_C = st.checkbox("C. ผู้รับบริการมีกำไร/รายได้เพิ่มขึ้น (Revenue/Profit Increase)", key="chk_C", on_change=sync_chk, args=('C',), disabled=st.session_state.chk_B)
+    sec_C = st.checkbox("C. ผู้รับบริการมีกำไร/รายได้เพิ่มขึ้น (Revenue/Profit Increase)", key="chk_C", on_change=sync_chk, args=('C',), value=_pc('C'), disabled=st.session_state.chk_B)
     if sec_C:
         with st.container(border=True):
             st.markdown("<h4 style='color: #3b82f6;'>หมวด C: ผู้รับบริการมีกำไร/รายได้เพิ่มขึ้น</h4>", unsafe_allow_html=True)
@@ -727,7 +727,7 @@ elif st.session_state.active_calc_tab == TABS_LIST[1]:
             st.success(f"🏆 [คำนวณอัตโนมัติ] มูลค่า Pre-Impact หมวด C: **{c8:,.2f} บาท**")
 
     # Section D
-    sec_D = st.checkbox("D. ผู้รับบริการประหยัดค่าใช้จ่าย/ลดต้นทุนดำเนินงาน (Cost/Expense Reduction)", key="chk_D", on_change=sync_chk, args=('D',), disabled=st.session_state.chk_B)
+    sec_D = st.checkbox("D. ผู้รับบริการประหยัดค่าใช้จ่าย/ลดต้นทุนดำเนินงาน (Cost/Expense Reduction)", key="chk_D", on_change=sync_chk, args=('D',), value=_pc('D'), disabled=st.session_state.chk_B)
     if sec_D:
         with st.container(border=True):
             st.markdown("<h4 style='color: #3b82f6;'>หมวด D: ผู้รับบริการประหยัดค่าใช้จ่าย/ลดต้นทุน</h4>", unsafe_allow_html=True)
@@ -746,7 +746,7 @@ elif st.session_state.active_calc_tab == TABS_LIST[1]:
             st.success(f"🏆 [คำนวณอัตโนมัติ] มูลค่า Pre-Impact หมวด D: **{d6:,.2f} บาท**")
 
     # Section E
-    sec_E = st.checkbox("E. ผู้รับบริการมีประสิทธิภาพการปฏิบัติงานเพิ่มขึ้น (Efficiency Increase)", key="chk_E", on_change=sync_chk, args=('E',), disabled=st.session_state.chk_B)
+    sec_E = st.checkbox("E. ผู้รับบริการมีประสิทธิภาพการปฏิบัติงานเพิ่มขึ้น (Efficiency Increase)", key="chk_E", on_change=sync_chk, args=('E',), value=_pc('E'), disabled=st.session_state.chk_B)
     if sec_E:
         with st.container(border=True):
             st.markdown("<h4 style='color: #3b82f6;'>หมวด E: เพิ่มประสิทธิภาพในการทำงาน</h4>", unsafe_allow_html=True)
@@ -773,7 +773,7 @@ elif st.session_state.active_calc_tab == TABS_LIST[1]:
             st.success(f"🏆 [คำนวณอัตโนมัติ] มูลค่า Pre-Impact หมวด E: **{e12:,.2f} บาท**")
 
     # Section F
-    sec_F = st.checkbox("F. การลดระดับความเสี่ยงหรือป้องกันความเสียหาย (Risk Mitigation / Damage Prevention)", key="chk_F", on_change=sync_chk, args=('F',), disabled=st.session_state.chk_B)
+    sec_F = st.checkbox("F. การลดระดับความเสี่ยงหรือป้องกันความเสียหาย (Risk Mitigation / Damage Prevention)", key="chk_F", on_change=sync_chk, args=('F',), value=_pc('F'), disabled=st.session_state.chk_B)
     if sec_F:
         with st.container(border=True):
             st.markdown("<h4 style='color: #3b82f6;'>หมวด F: ลดระดับความเสี่ยงหรือความเสียหาย</h4>", unsafe_allow_html=True)
@@ -790,7 +790,7 @@ elif st.session_state.active_calc_tab == TABS_LIST[1]:
             st.success(f"🏆 [คำนวณอัตโนมัติ] มูลค่า Pre-Impact หมวด F: **{f6:,.2f} บาท**")
 
     # Section G
-    sec_G = st.checkbox("G. การพัฒนาสมรรถนะบุคลากรผ่านการฝึกอบรม (Technical Skill Upgrade)", key="chk_G", on_change=sync_chk, args=('G',), disabled=st.session_state.chk_B)
+    sec_G = st.checkbox("G. การพัฒนาสมรรถนะบุคลากรผ่านการฝึกอบรม (Technical Skill Upgrade)", key="chk_G", on_change=sync_chk, args=('G',), value=_pc('G'), disabled=st.session_state.chk_B)
     if sec_G:
         with st.container(border=True):
             st.markdown("<h4 style='color: #3b82f6;'>หมวด G: พัฒนาสมรรถนะทักษะบุคลากร</h4>", unsafe_allow_html=True)
@@ -806,7 +806,7 @@ elif st.session_state.active_calc_tab == TABS_LIST[1]:
             st.success(f"🏆 [คำนวณอัตโนมัติ] มูลค่า Pre-Impact หมวด G: **{g5:,.2f} บาท**")
 
     # Section K
-    sec_K = st.checkbox("K. [Impact] อื่น ๆ เปรียบเทียบสิ่งที่เกิดขึ้นก่อน-หลังใช้ผลงานวิจัย (Other Comparative Impact)", key="chk_K", on_change=sync_chk, args=('K',))
+    sec_K = st.checkbox("K. [Impact] อื่น ๆ เปรียบเทียบสิ่งที่เกิดขึ้นก่อน-หลังใช้ผลงานวิจัย (Other Comparative Impact)", key="chk_K", on_change=sync_chk, args=('K',), value=_pc('K'))
     if sec_K:
         with st.container(border=True):
             st.markdown("<h4 style='color: #3b82f6;'>หมวด K: [Impact] อื่น ๆ เปรียบเทียบสิ่งที่เกิดขึ้นก่อน-หลังใช้ผลงานวิจัย</h4>", unsafe_allow_html=True)
@@ -838,7 +838,7 @@ elif st.session_state.active_calc_tab == TABS_LIST[2]:
     st.markdown("### 💰 ประเมินการร่วมลงทุนเพิ่มของกลุ่มลูกค้า/ผู้รับประโยชน์ (Pre-Investment)")
     
     # Section H
-    sec_H = st.checkbox("H. [Investment] ผู้รับบริการมีการลงทุนวิจัยต่อยอด (Client R&D Investment)", key="chk_H", on_change=sync_chk, args=('H',))
+    sec_H = st.checkbox("H. [Investment] ผู้รับบริการมีการลงทุนวิจัยต่อยอด (Client R&D Investment)", key="chk_H", on_change=sync_chk, args=('H',), value=_pc('H'))
     if sec_H:
         with st.container(border=True):
             st.markdown("<h4 style='color: #f59e0b;'>หมวด H: การลงทุนเพื่อวิจัยและพัฒนาต่อยอด</h4>", unsafe_allow_html=True)
@@ -853,7 +853,7 @@ elif st.session_state.active_calc_tab == TABS_LIST[2]:
             st.success(f"🏆 [คำนวณอัตโนมัติ] มูลค่า Pre-Investment หมวด H: **{h4:,.2f} บาท**")
 
     # Section I
-    sec_I = st.checkbox("I. [Investment] ผู้รับบริการมีการลงทุนในกระบวนการผลิตและบริการ (Client Process Investment)", key="chk_I", on_change=sync_chk, args=('I',))
+    sec_I = st.checkbox("I. [Investment] ผู้รับบริการมีการลงทุนในกระบวนการผลิตและบริการ (Client Process Investment)", key="chk_I", on_change=sync_chk, args=('I',), value=_pc('I'))
     if sec_I:
         with st.container(border=True):
             st.markdown("<h4 style='color: #f59e0b;'>หมวด I: ลงทุนเพิ่มเติมในระบบการผลิต</h4>", unsafe_allow_html=True)
@@ -868,7 +868,7 @@ elif st.session_state.active_calc_tab == TABS_LIST[2]:
             st.success(f"🏆 [คำนวณอัตโนมัติ] มูลค่า Pre-Investment หมวด I: **{i4:,.2f} บาท**")
 
     # Section J
-    sec_J = st.checkbox("J. [Investment] ผู้รับบริการมีการจ้างงานเพิ่ม (Additional Staff Hiring)", key="chk_J", on_change=sync_chk, args=('J',))
+    sec_J = st.checkbox("J. [Investment] ผู้รับบริการมีการจ้างงานเพิ่ม (Additional Staff Hiring)", key="chk_J", on_change=sync_chk, args=('J',), value=_pc('J'))
     if sec_J:
         with st.container(border=True):
             st.markdown("<h4 style='color: #f59e0b;'>หมวด J: ร่วมลงทุนจ้างงานบุคลากรใหม่</h4>", unsafe_allow_html=True)
