@@ -220,9 +220,16 @@ def _pc(section):
     w_val = st.session_state.get(f"chk_{section}")
     return w_val if w_val is not None else False
 
-
+def _gm(field):
+    """Robustly get project metadata from any possible state key."""
+    # Priority: 1. Main session state, 2. Widget key, 3. Persistent shadow (if we add them)
+    val = st.session_state.get(field)
+    if not val:
+        val = st.session_state.get(f"wid_{field}")
+    return str(val).strip() if val else ""
 
 def compute_results():
+
     res = {}
     
     # B
@@ -929,10 +936,16 @@ elif st.session_state.active_calc_tab == TABS_LIST[4]:
     submit_clicked = st.button("📤 ส่งและพิมพ์รายงานการประเมิน (Submit & Print)", type="primary", use_container_width=True)
     
     if submit_clicked:
-        proj_id = st.session_state.projectId.strip()
-        proj_name = st.session_state.projectName.strip()
-        
-        if not proj_id or not proj_name:
+        # Robust metadata retrieval
+        p_id_final   = st.session_state.get("projectId", "").strip()
+        p_name_final = st.session_state.get("projectName", "").strip()
+        p_type_final = st.session_state.get("reportType", "รายปี")
+        m_krrn_f     = st.session_state.get("meta_krrn", "").strip()
+        m_krid_f     = st.session_state.get("meta_krid", "").strip()
+        m_krrn_rel_f = st.session_state.get("meta_krrn_related", "").strip()
+        m_patent_f   = st.session_state.get("meta_patent_id", "").strip()
+
+        if not p_id_final or not p_name_final:
             st.error("❌ กรุณาระบุ 'รหัสโครงการ' และ 'ชื่อโครงการ' ให้สมบูรณ์ในแท็บ 1 ก่อนจัดทำรายงาน")
         elif total_impact == 0 and total_investment == 0:
             st.error("❌ มูลค่าผลลัพธ์การประเมินเป็น 0 บาท กรุณากรอกข้อมูลในมิติต่าง ๆ ในแท็บ 2 หรือ 3 อย่างน้อยหนึ่งหมวด")
@@ -958,13 +971,13 @@ elif st.session_state.active_calc_tab == TABS_LIST[4]:
             eval_payload = {
                 "employee_id": st.session_state.employee_id,
                 "organization": st.session_state.organization,
-                "project_id": proj_id,
-                "project_name": proj_name,
-                "report_type": st.session_state.reportType,
-                "meta_krrn": st.session_state.meta_krrn,
-                "meta_krid": st.session_state.meta_krid,
-                "meta_krrn_related": st.session_state.meta_krrn_related,
-                "meta_patent_id": st.session_state.meta_patent_id,
+                "project_id": p_id_final,
+                "project_name": p_name_final,
+                "report_type": p_type_final,
+                "meta_krrn": m_krrn_f,
+                "meta_krid": m_krid_f,
+                "meta_krrn_related": m_krrn_rel_f,
+                "meta_patent_id": m_patent_f,
                 "total_impact": total_impact,
                 "total_investment": total_investment,
                 "sections": sections_dict,
@@ -998,13 +1011,13 @@ elif st.session_state.active_calc_tab == TABS_LIST[4]:
                 "type": "preimpact",
                 "organization": st.session_state.organization,
                 "employeeId": st.session_state.employee_id,
-                "projectId": proj_id,
-                "projectName": proj_name,
-                "reportType": st.session_state.reportType,
-                "metaKRRN": st.session_state.meta_krrn,
-                "metaKRID": st.session_state.meta_krid,
-                "metaKRRNRelated": st.session_state.meta_krrn_related,
-                "metaPatentId": st.session_state.meta_patent_id,
+                "projectId": p_id_final,
+                "projectName": p_name_final,
+                "reportType": p_type_final,
+                "metaKRRN": m_krrn_f,
+                "metaKRID": m_krid_f,
+                "metaKRRNRelated": m_krrn_rel_f,
+                "metaPatentId": m_patent_f,
                 "sectionB": str(results.get("B", "")) if st.session_state.chk_B else "",
                 "sectionC": str(results.get("C", "")) if st.session_state.chk_C else "",
                 "sectionD": str(results.get("D", "")) if st.session_state.chk_D else "",
@@ -1036,13 +1049,13 @@ elif st.session_state.active_calc_tab == TABS_LIST[4]:
                 
                 <div class="report-section">
                     <h4>ข้อมูลโครงการ</h4>
-                    <div class="report-row"><span class="label">รหัสโครงการ (Project ID):</span><span class="value">{proj_id}</span></div>
-                    <div class="report-row"><span class="label">ชื่อโครงการ (Project Name):</span><span class="value">{proj_name}</span></div>
-                    <div class="report-row"><span class="label">รูปแบบช่วงเวลาที่บันทึก:</span><span class="value">{st.session_state.reportType}</span></div>
-                    <div class="report-row"><span class="label">เลขที่ KRRN ผลงาน 3P:</span><span class="value">{st.session_state.meta_krrn or 'ไม่มี'}</span></div>
-                    <div class="report-row"><span class="label">เลขที่ KRID ผลงาน 3P:</span><span class="value">{st.session_state.meta_krid or 'ไม่มี'}</span></div>
-                    <div class="report-row"><span class="label">เลขที่ KRRN ที่เกี่ยวข้อง:</span><span class="value">{st.session_state.meta_krrn_related or 'ไม่มี'}</span></div>
-                    <div class="report-row"><span class="label">เลขที่สิทธิบัตร/อนุสิทธิบัตร:</span><span class="value">{st.session_state.meta_patent_id or 'ไม่มี'}</span></div>
+                    <div class="report-row"><span class="label">รหัสโครงการ (Project ID):</span><span class="value">{p_id_final}</span></div>
+                    <div class="report-row"><span class="label">ชื่อโครงการ (Project Name):</span><span class="value">{p_name_final}</span></div>
+                    <div class="report-row"><span class="label">รูปแบบช่วงเวลาที่บันทึก:</span><span class="value">{p_type_final}</span></div>
+                    <div class="report-row"><span class="label">เลขที่ KRRN ผลงาน 3P:</span><span class="value">{m_krrn_f or 'ไม่มี'}</span></div>
+                    <div class="report-row"><span class="label">เลขที่ KRID ผลงาน 3P:</span><span class="value">{m_krid_f or 'ไม่มี'}</span></div>
+                    <div class="report-row"><span class="label">เลขที่ KRRN ที่เกี่ยวข้อง:</span><span class="value">{m_krrn_rel_f or 'ไม่มี'}</span></div>
+                    <div class="report-row"><span class="label">เลขที่สิทธิบัตร/อนุสิทธิบัตร:</span><span class="value">{m_patent_f or 'ไม่มี'}</span></div>
                 </div>
             '''
             
