@@ -636,25 +636,8 @@ elif st.session_state.active_calc_tab == TABS_LIST[3]:
     proj_id = st.session_state.projectId.strip()
     proj_name = st.session_state.projectName.strip()
     
-    html_output = f'''
-    <div id="print-area" class="report-container">
-        <div class="report-header">
-            <div class="report-title">รายงานการประมาณการผลลัพธ์และผลกระทบโครงการวิจัย (Pre-Impact)</div>
-            <div class="report-meta">วันที่ออกรายงาน: {datetime.now().strftime('%Y-%m-%d')}</div>
-            <div class="report-meta">ผู้ประเมิน: {st.session_state.employee_id} ({st.session_state.organization})</div>
-        </div>
-        
-        <div class="report-section">
-            <h4>ข้อมูลโครงการ</h4>
-            <div class="report-row"><span class="label">รหัสโครงการ (Project ID):</span><span class="value">{proj_id or "-"}</span></div>
-            <div class="report-row"><span class="label">ชื่อโครงการ (Project Name):</span><span class="value">{proj_name or "-"}</span></div>
-            <div class="report-row"><span class="label">รูปแบบช่วงเวลาที่บันทึก:</span><span class="value">{st.session_state.reportType}</span></div>
-            <div class="report-row"><span class="label">เลขที่ KRRN ผลงาน 3P:</span><span class="value">{st.session_state.meta_krrn or 'ไม่มี'}</span></div>
-            <div class="report-row"><span class="label">เลขที่ KRID ผลงาน 3P:</span><span class="value">{st.session_state.meta_krid or 'ไม่มี'}</span></div>
-            <div class="report-row"><span class="label">เลขที่ KRRN ที่เกี่ยวข้อง:</span><span class="value">{st.session_state.meta_krrn_related or 'ไม่มี'}</span></div>
-            <div class="report-row"><span class="label">เลขที่สิทธิบัตร/อนุสิทธิบัตร:</span><span class="value">{st.session_state.meta_patent_id or 'ไม่มี'}</span></div>
-        </div>
-    '''
+    # --- Build full HTML report string ---
+    css_link = '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;600;700&display=swap">'
     
     sections_map = {
         'B': ('[Impact] ลดการนำเข้าต่างประเทศ', 'B', 'บาท'),
@@ -669,29 +652,55 @@ elif st.session_state.active_calc_tab == TABS_LIST[3]:
         'J': ('[Investment] จ้างงานเพิ่ม', 'J', 'บาท'),
     }
     
-    html_output += "<div class='report-section'><h4>รายละเอียดมูลค่าประเมินแยกรายหมวด</h4>"
+    detail_rows = ""
     has_any = False
     for s, (title, payload_key, unit) in sections_map.items():
         if _pc(s):
             has_any = True
             val = current_results.get(payload_key, 0.0)
-            html_output += f'<div class="report-row highlight"><span class="label">🔹 {title}:</span><span class="value">{val:,.2f} {unit}</span></div>'
-            
+            detail_rows += f'<div class="row hi"><span>🔹 {title}:</span><span>{val:,.2f} {unit}</span></div>'
     if not has_any:
-        html_output += f'<div class="report-row"><span class="label" style="color:#94a3b8;">ยังไม่ได้เลือกประเมินมิติใดๆ</span></div>'
-        
-    html_output += "</div>"
+        detail_rows = '<div class="row"><span style="color:#888">ยังไม่ได้เลือกประเมินมิติใดๆ</span></div>'
     
-    html_output += f'''
-        <div class="report-total-section">
-            <div class="report-total-row impact"><span class="label">มูลค่า Pre-Impact รวมทั้งหมด:</span><span class="value">{total_impact:,.2f} บาท</span></div>
-            <div class="report-total-row investment"><span class="label">มูลค่า Pre-Investment รวมทั้งหมด:</span><span class="value">{total_investment:,.2f} บาท</span></div>
-        </div>
-    </div>
-    '''
+    html_output = f"""{css_link}
+<style>
+  body{{font-family:'Noto Sans Thai',sans-serif;background:#111827;color:#f1f5f9;padding:24px;margin:0;}}
+  .box{{background:#1e293b;border-radius:12px;padding:24px;border:1px solid rgba(255,255,255,0.07);}}
+  .title{{font-size:1.3rem;font-weight:800;color:#38bdf8;text-align:center;margin-bottom:4px;}}
+  .meta{{font-size:0.82rem;color:#94a3b8;text-align:center;margin-bottom:2px;}}
+  hr{{border:none;border-top:1px solid rgba(255,255,255,0.08);margin:16px 0;}}
+  h4{{color:#38bdf8;font-size:1rem;margin:0 0 10px 0;}}
+  .row{{display:flex;justify-content:space-between;padding:5px 8px;border-radius:5px;font-size:0.9rem;}}
+  .row:hover{{background:rgba(255,255,255,0.03);}}
+  .hi{{background:rgba(56,189,248,0.08);font-weight:700;color:#38bdf8;border:1px solid rgba(56,189,248,0.15);}}
+  .totals{{background:#0f172a;border-radius:10px;padding:14px;margin-top:16px;border:1px solid rgba(255,255,255,0.07);}}
+  .t-row{{display:flex;justify-content:space-between;font-size:1.05rem;font-weight:800;padding:5px 0;}}
+  .t-impact{{color:#06b6d4;}} .t-invest{{color:#f59e0b;}}
+</style>
+<div class="box">
+  <div class="title">รายงานการประมาณการผลลัพธ์และผลกระทบโครงการวิจัย (Pre-Impact)</div>
+  <div class="meta">วันที่ออกรายงาน: {datetime.now().strftime('%Y-%m-%d')}</div>
+  <div class="meta">ผู้ประเมิน: {st.session_state.employee_id} ({st.session_state.organization})</div>
+  <hr>
+  <h4>ข้อมูลโครงการ</h4>
+  <div class="row"><span>รหัสโครงการ (Project ID):</span><span>{proj_id or '-'}</span></div>
+  <div class="row"><span>ชื่อโครงการ (Project Name):</span><span>{proj_name or '-'}</span></div>
+  <div class="row"><span>รูปแบบช่วงเวลาที่บันทึก:</span><span>{st.session_state.reportType}</span></div>
+  <div class="row"><span>เลขที่ KRRN ผลงาน 3P:</span><span>{st.session_state.meta_krrn or 'ไม่มี'}</span></div>
+  <div class="row"><span>เลขที่ KRID ผลงาน 3P:</span><span>{st.session_state.meta_krid or 'ไม่มี'}</span></div>
+  <div class="row"><span>เลขที่ KRRN ที่เกี่ยวข้อง:</span><span>{st.session_state.meta_krrn_related or 'ไม่มี'}</span></div>
+  <div class="row"><span>เลขที่สิทธิบัตร/อนุสิทธิบัตร:</span><span>{st.session_state.meta_patent_id or 'ไม่มี'}</span></div>
+  <hr>
+  <h4>รายละเอียดมูลค่าประเมินแยกรายหมวด</h4>
+  {detail_rows}
+  <div class="totals">
+    <div class="t-row t-impact"><span>มูลค่า Pre-Impact รวมทั้งหมด:</span><span>{total_impact:,.2f} บาท</span></div>
+    <div class="t-row t-invest"><span>มูลค่า Pre-Investment รวมทั้งหมด:</span><span>{total_investment:,.2f} บาท</span></div>
+  </div>
+</div>"""
     
-    # Render all combined HTML at once so tags aren't closed prematurely
-    st.markdown(html_output, unsafe_allow_html=True)
+    # Use st.components.v1.html() which renders real HTML, unlike st.markdown() which can escape tags
+    st.components.v1.html(html_output, height=600, scrolling=True)
     
     # Corrected Print Button using window.parent.print()
     st.components.v1.html('''
