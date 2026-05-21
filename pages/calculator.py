@@ -1,7 +1,47 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import requests
 import firebase_config
 from datetime import datetime
+
+# Inject background JavaScript to automatically detect browser autofill on input fields
+# and dispatch synthetic events so Streamlit's React frontend registers the values.
+components.html(
+    """
+    <script>
+        const syncAutofill = () => {
+            try {
+                const parentDoc = window.parent.document;
+                if (!parentDoc) return;
+                
+                const inputs = parentDoc.querySelectorAll('input[type="text"], input[type="number"], textarea');
+                inputs.forEach(input => {
+                    if (input.value && input.value.trim() !== "") {
+                        if (parentDoc.activeElement === input) {
+                            input._lastSyncedValue = input.value;
+                            return;
+                        }
+                        
+                        if (input.value !== input._lastSyncedValue) {
+                            input._lastSyncedValue = input.value;
+                            input.dispatchEvent(new Event('input', { bubbles: true }));
+                            input.dispatchEvent(new Event('change', { bubbles: true }));
+                        }
+                    }
+                });
+            } catch (e) {
+                console.error("Autofill sync script error:", e);
+            }
+        };
+
+        const timer = setInterval(syncAutofill, 500);
+        window.addEventListener('unload', () => clearInterval(timer));
+    </script>
+    """,
+    height=0,
+    width=0
+)
+
 
 # 1. Google Sheets Logging Endpoint
 GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbzylM96oiM837gDntJnqvfR3t7GEKb8OBaD2VdFfUaQ93PQ0j0Hrc3EHiqayIgHWsQg/exec'
