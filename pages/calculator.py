@@ -539,7 +539,11 @@ def render_stepper(current_step):
         """, unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
 
-render_stepper(2)
+if st.session_state.get("active_calc_tab") in [TABS_LIST[3], TABS_LIST[4]]:
+    render_stepper(3)
+else:
+    render_stepper(2)
+
 
 # 4. Checklist verification helper
 def render_checklist_lockout(tab_name):
