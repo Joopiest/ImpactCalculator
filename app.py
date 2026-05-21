@@ -94,9 +94,42 @@ else:
     
     # Firestore Connection Alert
     if firebase_config.is_db_connected():
-        st.sidebar.markdown("<div style='font-size: 0.75rem; color: #10b981; margin-bottom: 1rem;'>🟢 เชื่อมต่อคลาวด์ Firebase สำเร็จ</div>", unsafe_allow_html=True)
+        st.sidebar.markdown("<div style='font-size: 0.75rem; color: #10b981; margin-bottom: 0.5rem;'>🟢 เชื่อมต่อคลาวด์ Firebase สำเร็จ</div>", unsafe_allow_html=True)
     else:
-        st.sidebar.markdown("<div style='font-size: 0.75rem; color: #ef4444; margin-bottom: 1rem;'>🔴 ไม่พบการเชื่อมต่อ Firebase (ทำงานในระบบ Local)</div>", unsafe_allow_html=True)
+        st.sidebar.markdown("<div style='font-size: 0.75rem; color: #ef4444; margin-bottom: 0.5rem;'>🔴 ไม่พบการเชื่อมต่อ Firebase (ทำงานในระบบ Local)</div>", unsafe_allow_html=True)
+
+    # ── QUICK LOAD DRAFT (sidebar) ──────────────────────────────────────────
+    if firebase_config.is_db_connected():
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("<div style='font-size:0.8rem; font-weight:700; color:#818cf8; margin-bottom:0.5rem;'>📂 โหลดแบบร่างของฉัน</div>", unsafe_allow_html=True)
+        
+        drafts = firebase_config.load_drafts(st.session_state.employee_id)
+        if drafts:
+            draft_labels = {f"📄 {d['project_id']} — {d['project_name']}": d for d in drafts}
+            selected = st.sidebar.selectbox(
+                "เลือกแบบร่าง:",
+                ["— เลือก —"] + list(draft_labels.keys()),
+                key="sidebar_draft_selector",
+                label_visibility="collapsed"
+            )
+            if selected != "— เลือก —":
+                draft_data = draft_labels[selected]
+                if st.sidebar.button("🔄 โหลดแบบร่างนี้", use_container_width=True, key="sidebar_load_btn", type="primary"):
+                    st.session_state.projectId   = draft_data.get("project_id", "")
+                    st.session_state.projectName  = draft_data.get("project_name", "")
+                    st.session_state.reportType   = draft_data.get("report_type", "รายปี")
+                    sections = draft_data.get("sections", {})
+                    for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
+                        st.session_state[f"chk_{s}"] = sections.get(s, False)
+                        st.session_state[f"_p_chk_{s}"] = sections.get(s, False)
+                    fields = draft_data.get("fields", {})
+                    for k, v in fields.items():
+                        st.session_state[f"val_{k}"] = v
+                        st.session_state[f"_p_{k}"] = v
+                    st.sidebar.success(f"✅ โหลด '{draft_data.get('project_id','')}' แล้ว!")
+                    st.rerun()
+        else:
+            st.sidebar.caption("ยังไม่มีแบบร่างที่บันทึกไว้")
 
     # 6. Page Routing
     pages = [
