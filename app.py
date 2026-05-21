@@ -154,6 +154,27 @@ else:
                     st.session_state.meta_krrn_related = meta_krrn_related
                     st.session_state.meta_patent_id    = meta_patent_id
                     
+                    # Set checklist keys so user is not blocked and checklist shows passed
+                    st.session_state.checklist_passed = True
+                    st.session_state.checklist_data = {
+                        "chk_a1": True,
+                        "chk_a2": False,
+                        "chk_b1": True,
+                        "chk_b2": False,
+                        "chk_b3": False,
+                        "chk_b4": False,
+                        "chk_b5": False,
+                        "chk_b5_text": ""
+                    }
+                    st.session_state.chk_a1 = True
+                    st.session_state.chk_a2 = False
+                    st.session_state.chk_b1 = True
+                    st.session_state.chk_b2 = False
+                    st.session_state.chk_b3 = False
+                    st.session_state.chk_b4 = False
+                    st.session_state.chk_b5 = False
+                    st.session_state.chk_b5_text = ""
+                    
                     # Set widget keys to prevent race conditions on next rerun
                     st.session_state["wid_projectId"]   = proj_id
                     st.session_state["wid_projectName"]  = proj_name

@@ -10,26 +10,79 @@ st.markdown(
     """
     <img src="does-not-exist" style="display:none;" onerror="
         if (!window._autofillInterval) {
-            const syncStreamlitInputs = () => {
+            const syncStreamlitInputs = (forceBlur, skipActive) => {
+                if (forceBlur) {
+                    const active = document.activeElement;
+                    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT')) {
+                        active.blur();
+                    }
+                }
                 const inputs = document.querySelectorAll('input, textarea, select');
                 inputs.forEach(input => {
+                    if (skipActive && input === document.activeElement) {
+                        return;
+                    }
                     if (input.value !== undefined && input.value !== null) {
-                        const lastVal = input.getAttribute('data-last-synced');
+                        const lastVal = input.getAttribute('data-last-synced') || '';
                         if (input.value !== lastVal) {
-                            if (document.activeElement === input) return;
-                            input.setAttribute('data-last-synced', input.value);
-                            input.dispatchEvent(new Event('input', { bubbles: true }));
-                            input.dispatchEvent(new Event('change', { bubbles: true }));
-                            input.dispatchEvent(new Event('blur', { bubbles: true }));
+                            const tracker = input._valueTracker;
+                            if (tracker || input.tagName === 'SELECT' || input.type === 'checkbox' || input.type === 'radio') {
+                                input.setAttribute('data-last-synced', input.value);
+                                if (tracker) {
+                                    tracker.setValue(lastVal);
+                                }
+                                input.dispatchEvent(new Event('input', { bubbles: true }));
+                                input.dispatchEvent(new Event('change', { bubbles: true }));
+                                input.dispatchEvent(new Event('blur', { bubbles: true }));
+                            }
                         }
                     }
                 });
             };
-            window._autofillInterval = setInterval(syncStreamlitInputs, 500);
-            document.addEventListener('click', syncStreamlitInputs);
+            window._syncStreamlitInputsNow = syncStreamlitInputs;
+            window._autofillInterval = setInterval(() => syncStreamlitInputs(false, true), 300);
+            
+            document.addEventListener('click', (e) => {
+                const target = e.target.closest('button, [role=&quot;button&quot;], [role=&quot;option&quot;], [role=&quot;tab&quot;]');
+                if (target) {
+                    const btnText = target.textContent || '';
+                    const isNavBtn = btnText.includes('Next') || 
+                                      btnText.includes('Back') || 
+                                      btnText.includes('ขั้นตอนถัดไป') || 
+                                      btnText.includes('ย้อนกลับ') || 
+                                      btnText.includes('บันทึก') || 
+                                      btnText.includes('เซฟ') || 
+                                      btnText.includes('Save') || 
+                                      btnText.includes('Details') || 
+                                      btnText.includes('Pre-Impact') || 
+                                      btnText.includes('Pre-Investment') || 
+                                      btnText.includes('Summary') || 
+                                      btnText.includes('Submit') || 
+                                      btnText.includes('Drafts') || 
+                                      btnText.includes('โหลด') || 
+                                      btnText.includes('Load') ||
+                                      btnText.includes('ส่งรายงาน');
+                    if (isNavBtn && !target.hasAttribute('data-sync-delayed')) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const active = document.activeElement;
+                        if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT')) {
+                            active.blur();
+                        }
+                        syncStreamlitInputs(true, false);
+                        target.setAttribute('data-sync-delayed', 'true');
+                        setTimeout(() => {
+                            target.click();
+                            target.removeAttribute('data-sync-delayed');
+                        }, 250);
+                    }
+                }
+            }, true);
+            
             document.addEventListener('mouseover', (e) => {
-                if (e.target && (e.target.tagName === 'BUTTON' || e.target.closest('button'))) {
-                    syncStreamlitInputs();
+                const target = e.target.closest('button, [role=&quot;button&quot;], [role=&quot;option&quot;], [role=&quot;tab&quot;]');
+                if (target) {
+                    syncStreamlitInputs(false, true);
                 }
             });
         }
@@ -154,19 +207,35 @@ def sync_project_meta():
                     st.session_state["wid_meta_krrn_related"] = st.session_state.meta_krrn_related
                     st.session_state["wid_meta_patent_id"] = st.session_state.meta_patent_id
                     
-                    # Restoring checkbox toggles
+                    # Bypass checklist lockout
+                    st.session_state.checklist_passed = True
+                    st.session_state.checklist_data = {
+                        "chk_a1": True, "chk_a2": False, "chk_b1": True, "chk_b2": False,
+                        "chk_b3": False, "chk_b4": False, "chk_b5": False, "chk_b5_text": ""
+                    }
+                    st.session_state.chk_a1 = True
+                    st.session_state.chk_a2 = False
+                    st.session_state.chk_b1 = True
+                    st.session_state.chk_b2 = False
+                    st.session_state.chk_b3 = False
+                    st.session_state.chk_b4 = False
+                    st.session_state.chk_b5 = False
+                    st.session_state.chk_b5_text = ""
+                    
+                    # Restoring checkbox toggles (only shadow keys)
                     sections = matching_draft.get("sections", {})
                     for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
                         val_s = sections.get(s, False)
-                        st.session_state[f"chk_{s}"] = val_s
                         st.session_state[f"_p_chk_{s}"] = val_s
                         
-                    # Restoring fields
+                    # Restoring fields (only shadow keys)
                     fields = matching_draft.get("fields", {})
                     for k, v in FIELD_DEFAULTS.items():
                         loaded_val = fields.get(k, v)
-                        st.session_state[f"val_{k}"] = loaded_val
                         st.session_state[f"_p_val_{k}"] = loaded_val
+                        
+                    # Map only active tab's widget keys
+                    restore_tab(st.session_state.active_calc_tab)
                         
                     st.toast(f"🔄 โหลดแบบร่างโครงการ {proj_id} จาก Firestore อัตโนมัติ!")
                     
@@ -213,126 +282,145 @@ def autosave_to_cloud():
             # Background save to avoid UI lag (Firestore SDK is async-friendly but we use sync here for simplicity)
             firebase_config.save_draft(emp_id, proj_id, payload)
 
-def init_states():
-    # Debug logging
-    try:
-        import os
-        import json
-        log_file = "calculator_debug.log"
-        safe_state = {}
-        for k, v in st.session_state.items():
-            if isinstance(v, (int, float, str, bool, list, dict)):
-                safe_state[k] = v
-            else:
-                safe_state[k] = f"<{type(v).__name__}>"
-        with open(log_file, "a", encoding="utf-8") as f:
-            f.write(f"\n=== RERUN START ===\n")
-            f.write(f"Active Tab at start: {st.session_state.get('active_calc_tab')}\n")
-            f.write(f"Segmented Tab at start: {st.session_state.get('segmented_calc_tab')}\n")
-            f.write(f"State keys: {json.dumps(safe_state, ensure_ascii=False)}\n")
-    except Exception as e:
-        pass
+def get_tab_keys(tab_name):
+    """Maps a tab name to its associated widget and persistent shadow keys."""
+    if tab_name == TABS_LIST[0]: # Details
+        w_keys = ["wid_projectId", "wid_projectName", "wid_reportType", "wid_meta_krrn", "wid_meta_krid", "wid_meta_krrn_related", "wid_meta_patent_id"]
+        p_keys = ["projectId", "projectName", "reportType", "meta_krrn", "meta_krid", "meta_krrn_related", "meta_patent_id"]
+        return w_keys, p_keys
+    elif tab_name == TABS_LIST[1]: # Pre-Impact
+        w_keys = []
+        p_keys = []
+        for s in ['B', 'C', 'D', 'E', 'F', 'G', 'K']:
+            w_keys.append(f"chk_{s}")
+            p_keys.append(f"_p_chk_{s}")
+        f_ids = []
+        for s in ['B', 'C', 'D', 'E', 'F', 'G', 'K']:
+            if s == 'B': f_ids.extend(['b1', 'b2', 'b4', 'b5', 'b6', 'b7'])
+            elif s == 'C': f_ids.extend(['c1', 'c2', 'c3', 'c4', 'c6', 'c7'])
+            elif s == 'D': f_ids.extend(['d1', 'd2', 'd4', 'd5'])
+            elif s == 'E': f_ids.extend(['e1', 'e2', 'e6', 'e7', 'e9', 'e10', 'e11'])
+            elif s == 'F': f_ids.extend(['f1', 'f2', 'f3', 'f4', 'f5'])
+            elif s == 'G': f_ids.extend(['g1', 'g2', 'g3', 'g4'])
+            elif s == 'K': f_ids.extend(['k1', 'k2', 'k3'])
+        for fid in f_ids:
+            w_keys.append(f"val_{fid}")
+            p_keys.append(f"_p_val_{fid}")
+        return w_keys, p_keys
+    elif tab_name == TABS_LIST[2]: # Pre-Investment
+        w_keys = []
+        p_keys = []
+        for s in ['H', 'I', 'J']:
+            w_keys.append(f"chk_{s}")
+            p_keys.append(f"_p_chk_{s}")
+        f_ids = []
+        for s in ['H', 'I', 'J']:
+            if s == 'H': f_ids.extend(['h1', 'h2', 'h3'])
+            elif s == 'I': f_ids.extend(['i1', 'i2', 'i3'])
+            elif s == 'J': f_ids.extend(['j1', 'j2', 'j3', 'j4'])
+        for fid in f_ids:
+            w_keys.append(f"val_{fid}")
+            p_keys.append(f"_p_val_{fid}")
+        return w_keys, p_keys
+    return [], []
 
-    if "active_calc_tab" not in st.session_state:
-        st.session_state.active_calc_tab = TABS_LIST[0]
-    if "segmented_calc_tab" not in st.session_state:
-        st.session_state.segmented_calc_tab = TABS_LIST[0]
-    if "last_active_tab" not in st.session_state:
-        st.session_state.last_active_tab = TABS_LIST[0]
+def snapshot_tab(tab_name):
+    """Saves the current active tab's widget values to persistent shadow keys."""
+    w_keys, p_keys = get_tab_keys(tab_name)
+    for w_key, p_key in zip(w_keys, p_keys):
+        if w_key in st.session_state:
+            val = st.session_state[w_key]
+            if val is not None:
+                st.session_state[p_key] = val
 
-    if "projectId" not in st.session_state:
-        st.session_state.projectId = ""
-    if "projectName" not in st.session_state:
-        st.session_state.projectName = ""
-    if "reportType" not in st.session_state:
-        st.session_state.reportType = "รายปี"
-    
-    # KRRN/KRID/Patent metadata fields
-    for meta in ["meta_krrn", "meta_krid", "meta_krrn_related", "meta_patent_id"]:
-        if meta not in st.session_state:
-            st.session_state[meta] = ""
-
-    # ── TAB 1 Restoration ──
-    for field in ["projectId", "projectName", "reportType", "meta_krrn", "meta_krid", "meta_krrn_related", "meta_patent_id"]:
-        w_key = f"wid_{field}"
-        if w_key not in st.session_state:
-            st.session_state[w_key] = st.session_state.get(field, "")
-        
-    # Initialize persistent keys (_p_) and restore widget keys if missing
-    for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
-        p_key = f"_p_chk_{s}"
-        w_key = f"chk_{s}"
+def restore_tab(tab_name):
+    """Restores the persistent shadow keys to widget keys for the active tab, and removes other tabs' widget keys."""
+    # 1. Clean up widget keys of all OTHER tabs to prevent Streamlit reset behavior
+    for t in TABS_LIST:
+        if t != tab_name:
+            oth_w_keys, _ = get_tab_keys(t)
+            for owk in oth_w_keys:
+                if owk in st.session_state:
+                    del st.session_state[owk]
+                    
+    # 2. Restore active tab's widget keys
+    w_keys, p_keys = get_tab_keys(tab_name)
+    for w_key, p_key in zip(w_keys, p_keys):
         if p_key not in st.session_state:
-            st.session_state[p_key] = False
-        # Restore widget state ONLY if it's missing (e.g. after switching back to this tab)
-        if w_key not in st.session_state:
-            st.session_state[w_key] = st.session_state[p_key]
-            
-    for k, v in FIELD_DEFAULTS.items():
-        p_key = f"_p_val_{k}"
-        w_key = f"val_{k}"
-        if p_key not in st.session_state:
-            st.session_state[p_key] = v
-        # Restore widget state ONLY if it's missing
-        if w_key not in st.session_state:
-            st.session_state[w_key] = st.session_state[p_key]
+            if p_key.startswith("_p_chk_"):
+                st.session_state[p_key] = False
+            elif p_key.startswith("_p_val_"):
+                fid = p_key.replace("_p_val_", "")
+                st.session_state[p_key] = FIELD_DEFAULTS.get(fid, 0.0)
+            else: # Details page keys
+                field = p_key
+                if field == "reportType":
+                    st.session_state[field] = "รายปี"
+                else:
+                    st.session_state[field] = ""
+        st.session_state[w_key] = st.session_state[p_key]
 
 def snapshot_state():
-    """Manual trigger to save all current widget values to persistent shadow keys and cloud."""
-    # 1. Sync Tab 1 Metadata
-    meta_fields = ["projectId", "projectName", "reportType", "meta_krrn", "meta_krid", "meta_krrn_related", "meta_patent_id"]
-    for field in meta_fields:
-        w_key = f"wid_{field}"
-        if w_key in st.session_state:
-            new_val = st.session_state[w_key]
-            if new_val is not None:
-                st.session_state[field] = new_val
-
-    # 2. Sync Checkboxes directly to persistent shadow keys
-    for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
-        w_chk = f"chk_{s}"
-        p_chk = f"_p_chk_{s}"
-        if w_chk in st.session_state:
-            st.session_state[p_chk] = st.session_state[w_chk]
-            
-    # 3. Sync Field Values directly to persistent shadow keys
-    for k in FIELD_DEFAULTS:
-        w_val = f"val_{k}"
-        p_val = f"_p_val_{k}"
-        if w_val in st.session_state:
-            st.session_state[p_val] = st.session_state[w_val]
-
-    # 4. Autosave to cloud for extra safety
+    """Manual fallback to save active tab's states and trigger autosave."""
+    snapshot_tab(st.session_state.active_calc_tab)
     autosave_to_cloud()
 
 def deep_sync_all():
-    """Foolproof synchronization of all possible inputs to persistent state on every rerun."""
-    # 1. Sync Tab 1 Metadata
-    meta_fields = ["projectId", "projectName", "reportType", "meta_krrn", "meta_krid", "meta_krrn_related", "meta_patent_id"]
-    for field in meta_fields:
-        w_key = f"wid_{field}"
-        if w_key in st.session_state:
-            # ONLY update if the widget actually has content (don't overwrite with empty)
-            new_val = st.session_state[w_key]
-            if new_val is not None:
-                st.session_state[field] = new_val
-
-    # 2. Sync Numbers & Checkboxes (Persistent Shadow Keys)
-    for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
-        w_chk = f"chk_{s}"
-        p_chk = f"_p_chk_{s}"
-        if w_chk in st.session_state:
-            st.session_state[p_chk] = st.session_state[w_chk]
-            
-    for k in FIELD_DEFAULTS:
-        w_val = f"val_{k}"
-        p_val = f"_p_val_{k}"
-        if w_val in st.session_state:
-            st.session_state[p_val] = st.session_state[w_val]
+    """Sync active tab only."""
+    snapshot_tab(st.session_state.active_calc_tab)
 
 
-init_states()
-deep_sync_all() # Ensure widget data is mirrored to persistent state on every rerun
+# 4. Core Lifecycle Initialization & Early Tab Transition Check
+if "checklist_passed" not in st.session_state:
+    st.session_state.checklist_passed = False
+if "active_calc_tab" not in st.session_state:
+    st.session_state.active_calc_tab = TABS_LIST[0]
+if "segmented_calc_tab" not in st.session_state:
+    st.session_state.segmented_calc_tab = TABS_LIST[0]
+if "last_active_tab" not in st.session_state:
+    st.session_state.last_active_tab = TABS_LIST[0]
+
+# Initialize persistent details keys if not present
+if "projectId" not in st.session_state:
+    st.session_state.projectId = ""
+if "projectName" not in st.session_state:
+    st.session_state.projectName = ""
+if "reportType" not in st.session_state:
+    st.session_state.reportType = "รายปี"
+for meta in ["meta_krrn", "meta_krid", "meta_krrn_related", "meta_patent_id"]:
+    if meta not in st.session_state:
+        st.session_state[meta] = ""
+
+# Early Tab Transition Logic
+detected_change = False
+old_tab = st.session_state.last_active_tab
+
+if "segmented_calc_tab" in st.session_state and st.session_state.segmented_calc_tab != old_tab:
+    detected_change = True
+    target_tab = st.session_state.segmented_calc_tab
+elif st.session_state.active_calc_tab != old_tab:
+    detected_change = True
+    target_tab = st.session_state.active_calc_tab
+
+if detected_change:
+    # Save the old tab's inputs to persistent shadow keys
+    snapshot_tab(old_tab)
+    # Sync core variables to cloud
+    autosave_to_cloud()
+    
+    # Update all active tab markers
+    st.session_state.active_calc_tab = target_tab
+    st.session_state.segmented_calc_tab = target_tab
+    st.session_state.last_active_tab = target_tab
+    
+    # Restore the new tab's inputs to widget keys, and delete other tabs' widget keys
+    restore_tab(target_tab)
+else:
+    # Regular rerun within the same tab:
+    # 1. Sync the active tab's widget values to persistent shadow keys
+    snapshot_tab(st.session_state.active_calc_tab)
+    # 2. Ensure active tab's widget keys are restored in case they were lost
+    restore_tab(st.session_state.active_calc_tab)
 
 def _pv(key, default=0.0):
     """Read field value: prefer persistent shadow key, fall back to widget key or default."""
@@ -491,26 +579,14 @@ def render_stepper(current_step):
 
 render_stepper(2)
 
-# 4. Checklist verification check
-if not st.session_state.checklist_passed:
-    st.error("🚫 **การเข้าถึงถูกจำกัด (Access Restricted):** ท่านจำเป็นต้องประเมินความพร้อมแบบ **Checklist** ให้ผ่านเกณฑ์ก่อนเข้าใช้งานเครื่องประเมิน Pre-Impact")
-    st.info("💡 **คำแนะนำ:** กรุณากรอก Checklist ในหมวดที่ 1 (หลักเกณฑ์เบื้องต้น) และหมวดที่ 2 (ลักษณะของผลงาน/บริการ) ให้ครบถ้วนเพื่อปลดล็อคเครื่องคำนวณ")
-    
-    if st.button("📋 ไปหน้า Checklist ความพร้อมเพื่อปลดล็อค", use_container_width=True, type="primary"):
+# 4. Checklist verification helper
+def render_checklist_lockout(tab_name):
+    st.error(f"🚫 **การเข้าถึงถูกจำกัด (Access Restricted):** ท่านจำเป็นต้องประเมินความพร้อมแบบ **Checklist** ให้ผ่านเกณฑ์ก่อนเข้าใช้งานเครื่องประเมินในแท็บ {tab_name}")
+    st.info("💡 **คำแนะนำ:** กรุณากรอก Checklist ในหมวดที่ 1 (หลักเกณฑ์เบื้องต้น) และหมวดที่ 2 (ลักษณะของผลงาน/บริการ) ให้ครบถ้วนเพื่อปลดล็อคเครื่องคำนวณ หรือกรอกรหัสโครงการในแท็บ 1 หรือโหลดแบบร่างในแท็บ 5")
+    if st.button("📋 ไปหน้า Checklist ความพร้อมเพื่อปลดล็อค", key=f"btn_goto_checklist_{tab_name.replace(' ', '_')}", use_container_width=True, type="primary"):
         st.switch_page("pages/checklist.py")
-    st.stop()
 
 # 5. Form Fields & Interactive Logic Containers
-# Synchronize state based on user interaction source (widget vs button)
-if "segmented_calc_tab" in st.session_state and st.session_state.segmented_calc_tab != st.session_state.last_active_tab:
-    # Widget was clicked - force full snapshot & cloud save before switching
-    snapshot_state()
-    st.session_state.active_calc_tab = st.session_state.segmented_calc_tab
-    st.session_state.last_active_tab = st.session_state.segmented_calc_tab
-elif st.session_state.active_calc_tab != st.session_state.last_active_tab:
-    # Button was clicked
-    st.session_state.segmented_calc_tab = st.session_state.active_calc_tab
-    st.session_state.last_active_tab = st.session_state.active_calc_tab
 
 active_tab = st.segmented_control(
     "ขั้นตอนการประเมิน:",
@@ -608,6 +684,10 @@ if st.session_state.active_calc_tab == TABS_LIST[0]:
 
 # ==================== TAB 2: PRE-IMPACT ====================
 elif st.session_state.active_calc_tab == TABS_LIST[1]:
+    if not st.session_state.checklist_passed:
+        render_checklist_lockout("Pre-Impact")
+        st.stop()
+        
     st.markdown("### 📈 ประเมินมูลค่าผลกระทบทางเศรษฐกิจ/สังคม (Pre-Impact)")
     st.info("""
     💡 **กฎความซ้ำซ้อน (Exclusivity Rule):**
@@ -785,6 +865,10 @@ elif st.session_state.active_calc_tab == TABS_LIST[1]:
 
 # ==================== TAB 3: PRE-INVESTMENT ====================
 elif st.session_state.active_calc_tab == TABS_LIST[2]:
+    if not st.session_state.checklist_passed:
+        render_checklist_lockout("Pre-Investment")
+        st.stop()
+        
     st.markdown("### 💰 ประเมินการร่วมลงทุนเพิ่มของกลุ่มลูกค้า/ผู้รับประโยชน์ (Pre-Investment)")
     
     # Section H
@@ -846,6 +930,10 @@ elif st.session_state.active_calc_tab == TABS_LIST[2]:
 
 # ==================== TAB 4: SUMMARY & PRINT ====================
 elif st.session_state.active_calc_tab == TABS_LIST[3]:
+    if not st.session_state.checklist_passed:
+        render_checklist_lockout("Summary")
+        st.stop()
+        
     st.markdown("### 📄 สรุปผลการประเมิน (Summary Report)")
     
     current_results = compute_results()
@@ -1027,18 +1115,31 @@ elif st.session_state.active_calc_tab == TABS_LIST[4]:
                     st.session_state["wid_meta_krrn_related"] = meta_krrn_related
                     st.session_state["wid_meta_patent_id"] = meta_patent_id
                     
-                    # Restoring checkbox toggles (both widget and persistent shadow keys)
+                    # Bypass checklist lockout
+                    st.session_state.checklist_passed = True
+                    st.session_state.checklist_data = {
+                        "chk_a1": True, "chk_a2": False, "chk_b1": True, "chk_b2": False,
+                        "chk_b3": False, "chk_b4": False, "chk_b5": False, "chk_b5_text": ""
+                    }
+                    st.session_state.chk_a1 = True
+                    st.session_state.chk_a2 = False
+                    st.session_state.chk_b1 = True
+                    st.session_state.chk_b2 = False
+                    st.session_state.chk_b3 = False
+                    st.session_state.chk_b4 = False
+                    st.session_state.chk_b5 = False
+                    st.session_state.chk_b5_text = ""
+                    
+                    # Restoring checkbox toggles (only shadow keys)
                     sections = draft_data.get("sections", {})
                     for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
                         val_s = sections.get(s, False)
-                        st.session_state[f"chk_{s}"] = val_s
                         st.session_state[f"_p_chk_{s}"] = val_s
                         
-                    # Restoring fields (both widget and persistent shadow keys)
+                    # Restoring fields (only shadow keys)
                     fields = draft_data.get("fields", {})
                     for k, v in FIELD_DEFAULTS.items():
                         loaded_val = fields.get(k, v)
-                        st.session_state[f"val_{k}"] = loaded_val
                         st.session_state[f"_p_val_{k}"] = loaded_val
 
                     # Automatically direct user to Tab 1 (Details) for better UX
@@ -1046,6 +1147,9 @@ elif st.session_state.active_calc_tab == TABS_LIST[4]:
                     st.session_state.active_calc_tab = target_tab
                     st.session_state.segmented_calc_tab = target_tab
                     st.session_state.last_active_tab = target_tab
+                    
+                    # Map only active tab's widget keys
+                    restore_tab(target_tab)
                     
                     st.success("⚡ โหลดข้อมูลแบบร่างเรียบร้อยแล้ว!")
                     st.rerun()
@@ -1104,6 +1208,10 @@ elif st.session_state.active_calc_tab == TABS_LIST[4]:
     submit_clicked = st.button("📤 ส่งและพิมพ์รายงานการประเมิน (Submit & Print)", type="primary", use_container_width=True)
     
     if submit_clicked:
+        if not st.session_state.checklist_passed:
+            st.error("❌ ท่านจำเป็นต้องประเมินความพร้อมแบบ Checklist ให้ผ่านเกณฑ์ก่อนส่งรายงาน")
+            st.stop()
+            
         # Robust metadata retrieval
         p_id_final   = st.session_state.get("projectId", "").strip()
         p_name_final = st.session_state.get("projectName", "").strip()
