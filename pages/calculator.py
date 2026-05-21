@@ -954,8 +954,8 @@ elif st.session_state.active_calc_tab == TABS_LIST[3]:
   <div class="meta">ผู้ประเมิน: {st.session_state.employee_id} ({st.session_state.organization})</div>
   <hr>
   <h4>ข้อมูลโครงการ</h4>
-  <div class="row"><span>รหัสโครงการ (Project ID):</span><span>{proj_id_val or '-'}</span></div>
-  <div class="row"><span>ชื่อโครงการ (Project Name):</span><span>{proj_name_val or '-'}</span></div>
+  <div class="row"><span>รหัสโครงการ (Project ID):</span><span>{p_id_val or '-'}</span></div>
+  <div class="row"><span>ชื่อโครงการ (Project Name):</span><span>{p_name_val or '-'}</span></div>
   <div class="row"><span>ลักษณะผลงานเพิ่มเติม:</span><span>{p_desc_val or '-'}</span></div>
   <div class="row"><span>รูปแบบช่วงเวลาที่บันทึก:</span><span>{report_type_val}</span></div>
   <div class="row"><span>เลขที่ KRRN ผลงาน 3P:</span><span>{krrn_val or 'ไม่มี'}</span></div>
