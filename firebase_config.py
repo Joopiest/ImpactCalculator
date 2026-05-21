@@ -63,6 +63,10 @@ def save_draft(employee_id, project_id, draft_data):
             "project_name": draft_data.get("project_name", ""),
             "organization": draft_data.get("organization", ""),
             "report_type": draft_data.get("report_type", ""),
+            "meta_krrn": draft_data.get("meta_krrn", ""),
+            "meta_krid": draft_data.get("meta_krid", ""),
+            "meta_krrn_related": draft_data.get("meta_krrn_related", ""),
+            "meta_patent_id": draft_data.get("meta_patent_id", ""),
             "sections": draft_data.get("sections", {}),
             "fields": draft_data.get("fields", {}),
             "saved_at": firestore.SERVER_TIMESTAMP

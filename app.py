@@ -136,17 +136,34 @@ else:
                             f.write(f"Fields found: {list(item_data.get('fields', {}).keys())}\n")
                     except: pass
 
-                    st.session_state.projectId   = item_data.get("project_id", "")
-                    st.session_state.projectName  = item_data.get("project_name", "")
-                    st.session_state.reportType   = item_data.get("report_type", "รายปี")
+                    # Extract loaded values
+                    proj_id = item_data.get("project_id", "")
+                    proj_name = item_data.get("project_name", "")
+                    rep_type = item_data.get("report_type", "รายปี")
+                    meta_krrn = item_data.get("meta_krrn", "")
+                    meta_krid = item_data.get("meta_krid", "")
+                    meta_krrn_related = item_data.get("meta_krrn_related", "")
+                    meta_patent_id = item_data.get("meta_patent_id", "")
+
+                    # Set session state keys
+                    st.session_state.projectId   = proj_id
+                    st.session_state.projectName  = proj_name
+                    st.session_state.reportType   = rep_type
+                    st.session_state.meta_krrn         = meta_krrn
+                    st.session_state.meta_krid         = meta_krid
+                    st.session_state.meta_krrn_related = meta_krrn_related
+                    st.session_state.meta_patent_id    = meta_patent_id
                     
-                    # Metadata fields
-                    st.session_state.meta_krrn         = item_data.get("meta_krrn", "")
-                    st.session_state.meta_krid         = item_data.get("meta_krid", "")
-                    st.session_state.meta_krrn_related = item_data.get("meta_krrn_related", "")
-                    st.session_state.meta_patent_id    = item_data.get("meta_patent_id", "")
+                    # Set widget keys to prevent race conditions on next rerun
+                    st.session_state["wid_projectId"]   = proj_id
+                    st.session_state["wid_projectName"]  = proj_name
+                    st.session_state["wid_reportType"]   = rep_type
+                    st.session_state["wid_meta_krrn"]         = meta_krrn
+                    st.session_state["wid_meta_krid"]         = meta_krid
+                    st.session_state["wid_meta_krrn_related"] = meta_krrn_related
+                    st.session_state["wid_meta_patent_id"]    = meta_patent_id
                     
-                    # Handle section checkboxes
+                    # Handle section checkboxes (both widget and persistent shadow keys)
                     sections = item_data.get("sections", {})
                     if selection["type"] == "evaluation":
                         # If it was a submission, we need to map the list back to checkboxes
@@ -154,28 +171,37 @@ else:
                         sections = {s: (s in checked_list) for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']}
                     
                     for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
-                        st.session_state[f"chk_{s}"] = sections.get(s, False)
-                        st.session_state[f"_p_chk_{s}"] = sections.get(s, False)
+                        val_s = sections.get(s, False)
+                        st.session_state[f"chk_{s}"] = val_s
+                        st.session_state[f"_p_chk_{s}"] = val_s
                         
-                    # Handle field values
+                    # Handle field values (both widget and persistent shadow keys)
                     fields = item_data.get("fields", {})
-                    if selection["type"] == "evaluation":
-                        # If it was a submission, map the individual impact fields back to inputs
-                        # Note: This is a partial restoration since evaluation doesn't store all raw inputs,
-                        # but we can try to restore the main ones if they were saved in the evaluation payload.
-                        # For now, we trust the 'fields' dict if it exists.
-                        pass
-                    
-                    for k, v in fields.items():
-                        st.session_state[f"val_{k}"] = v
-                        st.session_state[f"_p_val_{k}"] = v
+                    field_defaults = {
+                        'b1': 0.0, 'b2': 0.0, 'b4': 100.0, 'b5': 1.0, 'b6': "รับจ้างวิจัย (1.0)", 'b7': 100.0,
+                        'c1': 0.0, 'c2': 0.0, 'c3': 0.0, 'c4': 0.0, 'c6': "รับจ้างวิจัย (1.0)", 'c7': 100.0,
+                        'd1': 0.0, 'd2': 0.0, 'd4': "รับจ้างวิจัย (1.0)", 'd5': 100.0,
+                        'e1': 0.0, 'e2': 8.0, 'e6': 0.0, 'e7': 0.0, 'e9': 1.0, 'e10': "รับจ้างวิจัย (1.0)", 'e11': 100.0,
+                        'f1': 0.0, 'f2': 100.0, 'f3': 100.0, 'f4': "รับจ้างวิจัย (1.0)", 'f5': 100.0,
+                        'g1': 1.0, 'g2': 0.0, 'g3': "รับจ้างวิจัย (1.0)", 'g4': 100.0,
+                        'h1': 0.0, 'h2': "รับจ้างวิจัย (1.0)", 'h3': 100.0,
+                        'i1': 0.0, 'i2': "รับจ้างวิจัย (1.0)", 'i3': 100.0,
+                        'j1': 0.0, 'j2': 100.0, 'j3': "รับจ้างวิจัย (1.0)", 'j4': 100.0,
+                        'k1': 0.0, 'k2': "รับจ้างวิจัย (1.0)", 'k3': 100.0
+                    }
+                    for k, v in field_defaults.items():
+                        loaded_val = fields.get(k, v)
+                        st.session_state[f"val_{k}"] = loaded_val
+                        st.session_state[f"_p_val_{k}"] = loaded_val
                         
-                    # Switch to Calculator page and first tab
+                    # Switch to Calculator page and Tab 1 immediately
                     target_tab = "📋 1. ข้อมูลโครงการ (Details)"
                     st.session_state.active_calc_tab = target_tab
                     st.session_state.segmented_calc_tab = target_tab
-                    st.sidebar.success(f"✅ โหลดข้อมูลสำเร็จ! กรุณาไปที่หน้าเครื่องประเมิน")
-                    st.rerun()
+                    st.session_state.last_active_tab = target_tab
+                    
+                    st.sidebar.success(f"✅ โหลดข้อมูลสำเร็จ!")
+                    st.switch_page("pages/calculator.py")
         else:
             st.sidebar.caption("ยังไม่มีประวัติการบันทึกหรือส่งรายงาน")
 

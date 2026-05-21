@@ -955,25 +955,53 @@ elif st.session_state.active_calc_tab == TABS_LIST[4]:
                 col_ld, col_del = st.columns(2)
                 
                 if col_ld.button("🔄 โหลดข้อมูลแบบร่างทับค่าปัจจุบัน", use_container_width=True, type="primary"):
-                    st.session_state.projectId = draft_data.get("project_id", "")
-                    st.session_state.projectName = draft_data.get("project_name", "")
-                    st.session_state.reportType = draft_data.get("report_type", "รายปี")
+                    # Extract loaded values
+                    proj_id = draft_data.get("project_id", "")
+                    proj_name = draft_data.get("project_name", "")
+                    rep_type = draft_data.get("report_type", "รายปี")
+                    meta_krrn = draft_data.get("meta_krrn", "")
+                    meta_krid = draft_data.get("meta_krid", "")
+                    meta_krrn_related = draft_data.get("meta_krrn_related", "")
+                    meta_patent_id = draft_data.get("meta_patent_id", "")
+
+                    # Set session state keys
+                    st.session_state.projectId = proj_id
+                    st.session_state.projectName = proj_name
+                    st.session_state.reportType = rep_type
+                    st.session_state.meta_krrn = meta_krrn
+                    st.session_state.meta_krid = meta_krid
+                    st.session_state.meta_krrn_related = meta_krrn_related
+                    st.session_state.meta_patent_id = meta_patent_id
+
+                    # Set widget keys to prevent race conditions on next rerun
+                    st.session_state["wid_projectId"] = proj_id
+                    st.session_state["wid_projectName"] = proj_name
+                    st.session_state["wid_reportType"] = rep_type
+                    st.session_state["wid_meta_krrn"] = meta_krrn
+                    st.session_state["wid_meta_krid"] = meta_krid
+                    st.session_state["wid_meta_krrn_related"] = meta_krrn_related
+                    st.session_state["wid_meta_patent_id"] = meta_patent_id
                     
-                    # Metadata fields
-                    st.session_state.meta_krrn         = draft_data.get("meta_krrn", "")
-                    st.session_state.meta_krid         = draft_data.get("meta_krid", "")
-                    st.session_state.meta_krrn_related = draft_data.get("meta_krrn_related", "")
-                    st.session_state.meta_patent_id    = draft_data.get("meta_patent_id", "")
-                    
-                    # Restoring checkbox toggles
+                    # Restoring checkbox toggles (both widget and persistent shadow keys)
                     sections = draft_data.get("sections", {})
                     for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
-                        st.session_state[f"chk_{s}"] = sections.get(s, False)
+                        val_s = sections.get(s, False)
+                        st.session_state[f"chk_{s}"] = val_s
+                        st.session_state[f"_p_chk_{s}"] = val_s
                         
-                    # Restoring fields
+                    # Restoring fields (both widget and persistent shadow keys)
                     fields = draft_data.get("fields", {})
-                    for k, v in fields.items():
-                        st.session_state[f"val_{k}"] = v
+                    for k, v in FIELD_DEFAULTS.items():
+                        loaded_val = fields.get(k, v)
+                        st.session_state[f"val_{k}"] = loaded_val
+                        st.session_state[f"_p_val_{k}"] = loaded_val
+
+                    # Automatically direct user to Tab 1 (Details) for better UX
+                    target_tab = "📋 1. ข้อมูลโครงการ (Details)"
+                    st.session_state.active_calc_tab = target_tab
+                    st.session_state.segmented_calc_tab = target_tab
+                    st.session_state.last_active_tab = target_tab
+                    
                     st.success("⚡ โหลดข้อมูลแบบร่างเรียบร้อยแล้ว!")
                     st.rerun()
                     
