@@ -362,20 +362,27 @@ def _gm(field):
             val = st.session_state.checklist_data.get(field)
     return str(val).strip() if val is not None else ""
 
-def autosave_to_cloud(silent=False):
-    """Saves current state to Firestore. Every navigation switch uses this."""
+import threading
+
+def autosave_to_cloud(silent=True):
+    """Saves current state to Firestore in the background to prevent UI lag. Every navigation switch uses this."""
     if firebase_config.is_db_connected():
         proj_id = st.session_state.get("projectId", "").strip()
         emp_id = st.session_state.get("employee_id", "").strip()
         if proj_id and emp_id:
-            # IMPORTANT: Capture current tab's latest data before payload generation
-            snapshot_tab(st.session_state.active_calc_tab)
             payload = get_current_state_payload()
-            if firebase_config.save_draft(emp_id, proj_id, payload):
-                if not silent:
-                    st.toast(f"☁️ บันทึกข้อมูล '{proj_id}' สำเร็จ")
+            
+            def background_save(e_id, p_id, p_load):
+                firebase_config.save_draft(e_id, p_id, p_load)
+                
+            if silent:
+                # Fire and forget network call, doesn't block Streamlit UI
+                threading.Thread(target=background_save, args=(emp_id, proj_id, payload)).start()
             else:
-                if not silent:
+                # Synchronous fallback for direct feedback
+                if firebase_config.save_draft(emp_id, proj_id, payload):
+                    st.toast(f"☁️ บันทึกข้อมูล '{proj_id}' สำเร็จ")
+                else:
                     st.toast("⚠️ ไม่สามารถบันทึก Cloud ได้")
 
 
