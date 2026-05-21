@@ -636,7 +636,7 @@ elif st.session_state.active_calc_tab == TABS_LIST[3]:
     proj_id = st.session_state.projectId.strip()
     proj_name = st.session_state.projectName.strip()
     
-    st.markdown(f'''
+    html_output = f'''
     <div id="print-area" class="report-container">
         <div class="report-header">
             <div class="report-title">รายงานการประมาณการผลลัพธ์และผลกระทบโครงการวิจัย (Pre-Impact)</div>
@@ -654,7 +654,7 @@ elif st.session_state.active_calc_tab == TABS_LIST[3]:
             <div class="report-row"><span class="label">เลขที่ KRRN ที่เกี่ยวข้อง:</span><span class="value">{st.session_state.meta_krrn_related or 'ไม่มี'}</span></div>
             <div class="report-row"><span class="label">เลขที่สิทธิบัตร/อนุสิทธิบัตร:</span><span class="value">{st.session_state.meta_patent_id or 'ไม่มี'}</span></div>
         </div>
-    ''', unsafe_allow_html=True)
+    '''
     
     sections_map = {
         'B': ('[Impact] ลดการนำเข้าต่างประเทศ', 'B', 'บาท'),
@@ -669,29 +669,34 @@ elif st.session_state.active_calc_tab == TABS_LIST[3]:
         'J': ('[Investment] จ้างงานเพิ่ม', 'J', 'บาท'),
     }
     
-    st.markdown("<div class='report-section'><h4>รายละเอียดมูลค่าประเมินแยกรายหมวด</h4>", unsafe_allow_html=True)
+    html_output += "<div class='report-section'><h4>รายละเอียดมูลค่าประเมินแยกรายหมวด</h4>"
+    has_any = False
     for s, (title, payload_key, unit) in sections_map.items():
         if _pc(s):
+            has_any = True
             val = current_results.get(payload_key, 0.0)
-            st.markdown(f'<div class="report-row highlight"><span class="label">🔹 {title}:</span><span class="value">{val:,.2f} {unit}</span></div>', unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+            html_output += f'<div class="report-row highlight"><span class="label">🔹 {title}:</span><span class="value">{val:,.2f} {unit}</span></div>'
+            
+    if not has_any:
+        html_output += f'<div class="report-row"><span class="label" style="color:#94a3b8;">ยังไม่ได้เลือกประเมินมิติใดๆ</span></div>'
+        
+    html_output += "</div>"
     
-    st.markdown(f'''
+    html_output += f'''
         <div class="report-total-section">
             <div class="report-total-row impact"><span class="label">มูลค่า Pre-Impact รวมทั้งหมด:</span><span class="value">{total_impact:,.2f} บาท</span></div>
             <div class="report-total-row investment"><span class="label">มูลค่า Pre-Investment รวมทั้งหมด:</span><span class="value">{total_investment:,.2f} บาท</span></div>
         </div>
     </div>
-    ''', unsafe_allow_html=True)
+    '''
     
+    # Render all combined HTML at once so tags aren't closed prematurely
+    st.markdown(html_output, unsafe_allow_html=True)
+    
+    # Corrected Print Button using window.parent.print()
     st.components.v1.html('''
-        <script>
-        function triggerPrint() {
-            window.parent.postMessage("trigger_print", "*");
-        }
-        </script>
-        <button onclick="triggerPrint()" style="background-color:#10b981; color:white; padding:10px 20px; border:none; border-radius:5px; cursor:pointer; font-weight:bold; font-family: 'Noto Sans Thai', sans-serif; width: 100%;">🖨️ สั่งพิมพ์เอกสารหน้านี้ (Print PDF / A4)</button>
-    ''', height=50)
+        <button onclick="window.parent.print()" style="background-color:#10b981; color:white; padding:10px 20px; border:none; border-radius:5px; cursor:pointer; font-weight:bold; font-family: 'Noto Sans Thai', sans-serif; width: 100%; box-shadow: 0 4px 6px rgba(0,0,0,0.1); font-size: 16px;">🖨️ สั่งพิมพ์เอกสารหน้านี้ (Print PDF / A4)</button>
+    ''', height=60)
     
     st.info("💡 เมื่อกดปุ่มสั่งพิมพ์ ระบบจะซ่อนเมนูของหน้าเว็บอัตโนมัติเพื่อให้เอกสารออกมาสวยงาม (สามารถกด Ctrl + P ได้เช่นกัน)")
     
