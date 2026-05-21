@@ -71,6 +71,7 @@ if not st.session_state.authenticated:
                     st.session_state.authenticated = True
                     st.session_state.organization = org
                     st.session_state.employee_id = emp_id.strip() if org != "Guest" else "Guest"
+                    st.session_state.just_logged_in = True
                     st.success("🔓 เข้าสู่ระบบสำเร็จ กำลังดาวน์โหลดข้อมูล...")
                     st.rerun()
                     
@@ -79,6 +80,7 @@ if not st.session_state.authenticated:
             st.session_state.authenticated = True
             st.session_state.organization = "Guest"
             st.session_state.employee_id = "Guest"
+            st.session_state.just_logged_in = True
             st.success("🔓 เข้าสู่ระบบในฐานะผู้มาเยือนสำเร็จ...")
             st.rerun()
 
@@ -233,6 +235,11 @@ else:
     
     pg = st.navigation(pages)
     
+    # Redirect immediately to Checklist if just logged in
+    if st.session_state.get("just_logged_in"):
+        st.session_state.just_logged_in = False
+        st.switch_page("pages/checklist.py")
+        
     # Render Logout Button at bottom of sidebar
     if st.sidebar.button("ออกจากระบบ (Log Out)", use_container_width=True, type="secondary"):
         # Clear all user and project data
