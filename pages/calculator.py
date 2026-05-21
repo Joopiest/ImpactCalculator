@@ -78,6 +78,14 @@ def sync_val(field_id):
         st.session_state[p_key] = st.session_state[w_key]
         st.toast(f"💾 บันทึกค่า {field_id} สำเร็จ")
 
+def sync_project_meta():
+    """Callback to sync Tab 1 fields to session state immediately."""
+    meta_fields = ["projectId", "projectName", "reportType", "meta_krrn", "meta_krid", "meta_krrn_related", "meta_patent_id"]
+    for field in meta_fields:
+        w_key = f"wid_{field}"
+        if w_key in st.session_state:
+            st.session_state[field] = st.session_state[w_key]
+
 def init_states():
     # Debug logging
     try:
@@ -116,6 +124,12 @@ def init_states():
     for meta in ["meta_krrn", "meta_krid", "meta_krrn_related", "meta_patent_id"]:
         if meta not in st.session_state:
             st.session_state[meta] = ""
+
+    # ── TAB 1 Restoration ──
+    for field in ["projectId", "projectName", "reportType", "meta_krrn", "meta_krid", "meta_krrn_related", "meta_patent_id"]:
+        w_key = f"wid_{field}"
+        if w_key not in st.session_state:
+            st.session_state[w_key] = st.session_state.get(field, "")
         
     # Initialize persistent keys (_p_) and restore widget keys if missing
     for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
@@ -138,6 +152,7 @@ def init_states():
 
 def snapshot_state():
     """Manual trigger to save all current widget values to persistent shadow keys."""
+    sync_project_meta()
     for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
         sync_chk(s)
     for k in FIELD_DEFAULTS:
@@ -323,25 +338,29 @@ results = compute_results()
 # ==================== TAB 1: PROJECT DETAILS ====================
 if st.session_state.active_calc_tab == TABS_LIST[0]:
     st.markdown("### 📋 กรอกข้อมูลรายละเอียดโครงการ")
-    st.session_state.projectId = st.text_input(
+    st.text_input(
         "รหัสโครงการ (Project ID) 👉 [กรอกข้อมูล]",
         value=st.session_state.get("projectId", ""),
         key="wid_projectId",
+        on_change=sync_project_meta,
         placeholder="เช่น P-20-XXXXX",
         help="รหัสอ้างอิงโครงการที่จดทะเบียนของหน่วยงาน"
     )
-    st.session_state.projectName = st.text_input(
+    st.text_input(
         "ชื่อโครงการ (Project Name) 👉 [กรอกข้อมูล]",
         value=st.session_state.get("projectName", ""),
         key="wid_projectName",
+        on_change=sync_project_meta,
         placeholder="ระบุชื่อโครงการวิจัย...",
         help="ชื่อหัวข้อโครงการวิจัยและพัฒนาฉบับเต็ม"
     )
     
-    st.session_state.reportType = st.radio(
+    st.radio(
         "แนวทางการรายงานผล (Report Timeline Style) 👉 [กรอกข้อมูล]",
         ["รายปี", "5 ปี"],
         index=0 if st.session_state.reportType == "รายปี" else 1,
+        key="wid_reportType",
+        on_change=sync_project_meta,
         horizontal=True,
         help="ระบุรูปแบบการวัดผลกระทบ: แบบรายปีปกติ หรือ ประเมินสะสมรวมระยะเวลา 5 ปี (60 เดือน)"
     )
@@ -351,31 +370,35 @@ if st.session_state.active_calc_tab == TABS_LIST[0]:
     st.markdown("#### 🔗 ข้อมูลอ้างอิงผลงาน 3P (KRRN / KRID / สิทธิบัตร)")
     st.caption('ถ้าไม่มี ให้ระบุว่า "ไม่มี" หรือ ถ้ามีมากกว่า 1 ให้ใช้ "," คั่น')
     
-    st.session_state.meta_krrn = st.text_input(
+    st.text_input(
         "7. เลขที่ KRRN ผลงาน 3P 👉 [กรอกข้อมูล]",
         value=st.session_state.get("meta_krrn", ""),
         key="wid_meta_krrn",
+        on_change=sync_project_meta,
         placeholder="ตัวอย่าง: 65248, 70065",
         help='เลขที่ KRRN ผลงาน 3P (ถ้าไม่มี ให้ระบุว่า "ไม่มี" หรือ ถ้ามีมากกว่า 1 ให้ใช้ ",")'
     )
-    st.session_state.meta_krid = st.text_input(
+    st.text_input(
         "8. เลขที่ KRID ผลงาน 3P 👉 [กรอกข้อมูล]",
         value=st.session_state.get("meta_krid", ""),
         key="wid_meta_krid",
+        on_change=sync_project_meta,
         placeholder="ตัวอย่าง: 45606029, 45809086",
         help='เลขที่ KRID ผลงาน 3P (ถ้าไม่มี ให้ระบุว่า "ไม่มี" หรือ ถ้ามีมากกว่า 1 ให้ใช้ ",")'
     )
-    st.session_state.meta_krrn_related = st.text_input(
+    st.text_input(
         "9. เลขที่ KRRN ผลงาน 3P ที่เกี่ยวข้อง 👉 [กรอกข้อมูล]",
         value=st.session_state.get("meta_krrn_related", ""),
         key="wid_meta_krrn_related",
+        on_change=sync_project_meta,
         placeholder="ตัวอย่าง: 45606029, 45809086",
         help='เลขที่ KRRN ผลงาน 3P ที่เกี่ยวข้อง (ถ้าไม่มี ให้ระบุว่า "ไม่มี" หรือ ถ้ามีมากกว่า 1 ให้ใช้ ",")'
     )
-    st.session_state.meta_patent_id = st.text_input(
+    st.text_input(
         "10. เลขที่คำขอยื่นสิทธิบัตร/อนุสิทธิบัตร 👉 [กรอกข้อมูล]",
         value=st.session_state.get("meta_patent_id", ""),
         key="wid_meta_patent_id",
+        on_change=sync_project_meta,
         placeholder="ตัวอย่าง: BTT028/2560 (LCA-NT-2560-3304-TH)",
         help='เลขที่คำขอยื่นสิทธิบัตร/อนุสิทธิบัตร (ถ้าไม่มี ให้ระบุว่า "ไม่มี" หรือ ถ้ามีมากกว่า 1 ให้ใช้ ",")'
     )
@@ -782,6 +805,12 @@ elif st.session_state.active_calc_tab == TABS_LIST[4]:
                     st.session_state.projectName = draft_data.get("project_name", "")
                     st.session_state.reportType = draft_data.get("report_type", "รายปี")
                     
+                    # Metadata fields
+                    st.session_state.meta_krrn         = draft_data.get("meta_krrn", "")
+                    st.session_state.meta_krid         = draft_data.get("meta_krid", "")
+                    st.session_state.meta_krrn_related = draft_data.get("meta_krrn_related", "")
+                    st.session_state.meta_patent_id    = draft_data.get("meta_patent_id", "")
+                    
                     # Restoring checkbox toggles
                     sections = draft_data.get("sections", {})
                     for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
@@ -829,6 +858,10 @@ elif st.session_state.active_calc_tab == TABS_LIST[4]:
                     "project_name": st.session_state.projectName,
                     "organization": st.session_state.organization,
                     "report_type": st.session_state.reportType,
+                    "meta_krrn": st.session_state.meta_krrn,
+                    "meta_krid": st.session_state.meta_krid,
+                    "meta_krrn_related": st.session_state.meta_krrn_related,
+                    "meta_patent_id": st.session_state.meta_patent_id,
                     "sections": sections,
                     "fields": fields
                 }

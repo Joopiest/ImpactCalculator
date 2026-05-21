@@ -118,6 +118,13 @@ else:
                     st.session_state.projectId   = draft_data.get("project_id", "")
                     st.session_state.projectName  = draft_data.get("project_name", "")
                     st.session_state.reportType   = draft_data.get("report_type", "รายปี")
+                    
+                    # Metadata fields
+                    st.session_state.meta_krrn         = draft_data.get("meta_krrn", "")
+                    st.session_state.meta_krid         = draft_data.get("meta_krid", "")
+                    st.session_state.meta_krrn_related = draft_data.get("meta_krrn_related", "")
+                    st.session_state.meta_patent_id    = draft_data.get("meta_patent_id", "")
+                    
                     sections = draft_data.get("sections", {})
                     for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
                         st.session_state[f"chk_{s}"] = sections.get(s, False)
