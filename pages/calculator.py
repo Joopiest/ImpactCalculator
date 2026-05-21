@@ -323,15 +323,15 @@ results = compute_results()
 # ==================== TAB 1: PROJECT DETAILS ====================
 if st.session_state.active_calc_tab == TABS_LIST[0]:
     st.markdown("### 📋 กรอกข้อมูลรายละเอียดโครงการ")
-    st.session_state.projectId = st.text_input(
+    st.text_input(
         "รหัสโครงการ (Project ID) 👉 [กรอกข้อมูล]", 
-        value=st.session_state.projectId, 
+        key="projectId",
         placeholder="เช่น P-20-XXXXX",
         help="รหัสอ้างอิงโครงการที่จดทะเบียนของหน่วยงาน"
     )
-    st.session_state.projectName = st.text_input(
+    st.text_input(
         "ชื่อโครงการ (Project Name) 👉 [กรอกข้อมูล]", 
-        value=st.session_state.projectName, 
+        key="projectName",
         placeholder="ระบุชื่อโครงการวิจัย...",
         help="ชื่อหัวข้อโครงการวิจัยและพัฒนาฉบับเต็ม"
     )
