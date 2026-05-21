@@ -225,17 +225,6 @@ def get_current_state_payload():
         "fields": fields
     }
 
-def autosave_to_cloud():
-    """Silently saves current state to Firestore if projectId is present."""
-    if firebase_config.is_db_connected():
-        proj_id = st.session_state.get("projectId", "").strip()
-        emp_id = st.session_state.get("employee_id", "").strip()
-        if proj_id and emp_id:
-            # Force snapshot of active tab before saving
-            snapshot_tab(st.session_state.active_calc_tab)
-            payload = get_current_state_payload()
-            firebase_config.save_draft(emp_id, proj_id, payload)
-
 def get_tab_keys(tab_name):
     """Maps a tab name to its associated widget and persistent shadow keys."""
     if tab_name == TABS_LIST[0]: # Details
@@ -287,30 +276,6 @@ def snapshot_tab(tab_name):
             # ONLY update if value is not None (Streamlit might send None during switch)
             if val is not None:
                 st.session_state[p_key] = val
-
-def restore_tab(tab_name):
-    """Restores the persistent shadow keys to widget keys for the active tab."""
-    w_keys, p_keys = get_tab_keys(tab_name)
-    for w_key, p_key in zip(w_keys, p_keys):
-        if p_key in st.session_state:
-            st.session_state[w_key] = st.session_state[p_key]
-        else:
-            # Default initialization
-            if p_key.startswith("_p_chk_"):
-                st.session_state[p_key] = False
-                st.session_state[w_key] = False
-            elif p_key.startswith("_p_val_"):
-                fid = p_key.replace("_p_val_", "")
-                def_val = FIELD_DEFAULTS.get(fid, 0.0)
-                st.session_state[p_key] = def_val
-                st.session_state[w_key] = def_val
-            else: # Tab 1
-                if p_key == "reportType":
-                    st.session_state[p_key] = "รายปี"
-                    st.session_state[w_key] = "รายปี"
-                else:
-                    st.session_state[p_key] = ""
-                    st.session_state[w_key] = ""
 
 def snapshot_state():
     """Manual fallback to save active tab's states and trigger autosave."""
@@ -377,35 +342,6 @@ for field in main_persistent:
 
 # Load data from Firestore on startup
 cloud_load_on_startup()
-
-# Early Tab Transition Logic
-detected_change = False
-old_tab = st.session_state.last_active_tab
-
-if "segmented_calc_tab" in st.session_state and st.session_state.segmented_calc_tab != old_tab:
-    detected_change = True
-    target_tab = st.session_state.segmented_calc_tab
-elif st.session_state.active_calc_tab != old_tab:
-    detected_change = True
-    target_tab = st.session_state.active_calc_tab
-
-if detected_change:
-    # IMPORTANT: Save the OLD tab's widgets before they disappear from session state
-    snapshot_tab(old_tab)
-    
-    # Update all active tab markers
-    st.session_state.active_calc_tab = target_tab
-    st.session_state.segmented_calc_tab = target_tab
-    st.session_state.last_active_tab = target_tab
-    
-    # Backup the now-updated shadow keys to the cloud immediately
-    autosave_to_cloud()
-    
-    # Prepare the NEW tab's widget keys so they show the correct values
-    restore_tab(target_tab)
-else:
-    # Continuous sync while on the same tab
-    restore_tab(st.session_state.active_calc_tab)
 
 def _pv(key, default=0.0):
     """Read field value directly from persistent shadow key."""
@@ -555,6 +491,36 @@ def compute_results():
     res["J"] = j1 * (j2 / 100.0) * j3 * (j4 / 100.0) if _pc('J') else 0.0
     
     return res
+
+# Early Tab Transition Logic
+detected_change = False
+old_tab = st.session_state.last_active_tab
+
+if "segmented_calc_tab" in st.session_state and st.session_state.segmented_calc_tab != old_tab:
+    detected_change = True
+    target_tab = st.session_state.segmented_calc_tab
+elif st.session_state.active_calc_tab != old_tab:
+    detected_change = True
+    target_tab = st.session_state.active_calc_tab
+
+if detected_change:
+    # IMPORTANT: Save the OLD tab's widgets before they disappear from session state
+    snapshot_tab(old_tab)
+    
+    # Update all active tab markers
+    st.session_state.active_calc_tab = target_tab
+    st.session_state.segmented_calc_tab = target_tab
+    st.session_state.last_active_tab = target_tab
+    
+    # Backup the now-updated shadow keys to the cloud immediately
+    autosave_to_cloud()
+    
+    # Prepare the NEW tab's widget keys so they show the correct values
+    restore_tab(target_tab)
+else:
+    # Continuous sync while on the same tab
+    restore_tab(st.session_state.active_calc_tab)
+
 
 # Render Header
 st.markdown("""
