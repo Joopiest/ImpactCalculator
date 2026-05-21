@@ -370,20 +370,16 @@ else:
     restore_tab(st.session_state.active_calc_tab)
 
 def _pv(key, default=0.0):
-    """Read field value: prefer persistent shadow key, fall back to widget key or default."""
+    """Read field value directly from persistent shadow key."""
     p_val = st.session_state.get(f"_p_val_{key}")
-    if p_val is not None:
-        return p_val
-    w_val = st.session_state.get(f"val_{key}")
-    return w_val if w_val is not None else default
+    if p_val is not None: return p_val
+    return default
 
 def _pc(section):
-    """Read checkbox state: prefer persistent shadow key, fall back to widget key or False."""
+    """Read checkbox state directly from persistent shadow key."""
     p_val = st.session_state.get(f"_p_chk_{section}")
-    if p_val is not None:
-        return p_val
-    w_val = st.session_state.get(f"chk_{section}")
-    return w_val if w_val is not None else False
+    if p_val is not None: return p_val
+    return False
 
 def _gm(field):
     """Robustly get project metadata from any possible state key."""
@@ -392,10 +388,37 @@ def _gm(field):
     if val is None or str(val).strip() == "":
         val = st.session_state.get(f"wid_{field}")
     if val is None or str(val).strip() == "":
-        # Try finding in checklist data as a last resort fallback
         if "checklist_data" in st.session_state:
             val = st.session_state.checklist_data.get(field)
     return str(val).strip() if val is not None else ""
+
+def autosave_to_cloud(silent=False):
+    """Saves current state to Firestore. Every navigation switch uses this."""
+    if firebase_config.is_db_connected():
+        proj_id = st.session_state.get("projectId", "").strip()
+        emp_id = st.session_state.get("employee_id", "").strip()
+        if proj_id and emp_id:
+            # IMPORTANT: Capture current tab's latest data before payload generation
+            snapshot_tab(st.session_state.active_calc_tab)
+            payload = get_current_state_payload()
+            if firebase_config.save_draft(emp_id, proj_id, payload):
+                if not silent:
+                    st.toast(f"☁️ บันทึกข้อมูล '{proj_id}' สำเร็จ")
+            else:
+                if not silent:
+                    st.toast("⚠️ ไม่สามารถบันทึก Cloud ได้")
+
+def restore_tab(tab_name, show_toast=False):
+    """Restores shadow keys to widget keys. Every tab entry uses this."""
+    w_keys, p_keys = get_tab_keys(tab_name)
+    found_data = False
+    for w_key, p_key in zip(w_keys, p_keys):
+        if p_key in st.session_state:
+            st.session_state[w_key] = st.session_state[p_key]
+            found_data = True
+    
+    if show_toast and found_data:
+        st.toast(f"📂 กู้คืนข้อมูล '{tab_name}' เรียบร้อย")
 
 def compute_results():
 
