@@ -128,13 +128,6 @@ else:
                 item_data = selection["data"]
                 
                 if st.sidebar.button("🔄 โหลดข้อมูลนี้", use_container_width=True, key="sidebar_load_btn", type="primary"):
-                    # DEBUG: Trace the data coming from Firestore
-                    try:
-                        with open("firestore_debug.log", "a", encoding="utf-8") as f:
-                            f.write(f"\n--- LOADING {selection['type'].upper()} ---\n")
-                            f.write(f"Project ID: {item_data.get('project_id')}\n")
-                            f.write(f"Fields found: {list(item_data.get('fields', {}).keys())}\n")
-                    except: pass
 
                     # Extract loaded values
                     proj_id = item_data.get("project_id", "")
@@ -220,6 +213,9 @@ else:
                     st.session_state.active_calc_tab = target_tab
                     st.session_state.segmented_calc_tab = target_tab
                     st.session_state.last_active_tab = target_tab
+                    
+                    # Set cloud loaded flag so calculator's cloud_load_on_startup doesn't overwrite
+                    st.session_state[f"_cloud_loaded_{proj_id}"] = True
                     
                     st.sidebar.success(f"✅ โหลดข้อมูลสำเร็จ!")
                     st.switch_page("pages/calculator.py")

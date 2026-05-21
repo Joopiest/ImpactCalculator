@@ -139,7 +139,7 @@ FIELD_DEFAULTS = {
 }
 
 def sync_chk(section):
-    """Callback to sync checkbox state to persistent shadow key immediately."""
+    """Callback to sync checkbox state to persistent shadow key AND Firestore immediately."""
     w_key = f"chk_{section}"
     p_key = f"_p_chk_{section}"
     if w_key in st.session_state:
@@ -158,14 +158,18 @@ def sync_chk(section):
         elif section in ['C', 'D', 'E', 'F', 'G'] and new_val:
             st.session_state["chk_B"] = False
             st.session_state["_p_chk_B"] = False
+        
+        # Save to Firestore immediately
+        autosave_to_cloud()
 
 def sync_val(field_id):
-    """Callback to sync field value to persistent shadow key immediately."""
+    """Callback to sync field value to persistent shadow key AND Firestore immediately."""
     w_key = f"val_{field_id}"
     p_key = f"_p_val_{field_id}"
     if w_key in st.session_state:
         st.session_state[p_key] = st.session_state[w_key]
-        st.toast(f"💾 บันทึกค่า {field_id} สำเร็จ")
+        # Save to Firestore immediately
+        autosave_to_cloud()
 
 def sync_project_meta():
     """Callback to sync Tab 1 fields and auto-retrieve drafts from Firestore if ID matches."""
@@ -369,6 +373,43 @@ def deep_sync_all():
     """Sync active tab only."""
     snapshot_tab(st.session_state.active_calc_tab)
 
+def cloud_load_on_startup():
+    """Load draft from Firestore into shadow keys on page startup.
+    This ensures that even after a page refresh, data is restored from cloud.
+    Only runs once per project load (uses _cloud_loaded flag)."""
+    if not firebase_config.is_db_connected():
+        return
+    proj_id = st.session_state.get("projectId", "").strip()
+    emp_id = st.session_state.get("employee_id", "").strip()
+    if not proj_id or not emp_id:
+        return
+    # Only load once per project
+    cache_flag = f"_cloud_loaded_{proj_id}"
+    if st.session_state.get(cache_flag):
+        return
+    try:
+        drafts = firebase_config.load_drafts(emp_id)
+        for d in drafts:
+            if d.get("project_id", "").strip() == proj_id:
+                # Populate shadow keys from Firestore
+                sections = d.get("sections", {})
+                for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
+                    st.session_state[f"_p_chk_{s}"] = sections.get(s, False)
+                fields = d.get("fields", {})
+                for k, v in FIELD_DEFAULTS.items():
+                    st.session_state[f"_p_val_{k}"] = fields.get(k, v)
+                # Also restore metadata
+                st.session_state.projectName = d.get("project_name", st.session_state.get("projectName", ""))
+                st.session_state.reportType = d.get("report_type", st.session_state.get("reportType", "รายปี"))
+                st.session_state.meta_krrn = d.get("meta_krrn", st.session_state.get("meta_krrn", ""))
+                st.session_state.meta_krid = d.get("meta_krid", st.session_state.get("meta_krid", ""))
+                st.session_state.meta_krrn_related = d.get("meta_krrn_related", st.session_state.get("meta_krrn_related", ""))
+                st.session_state.meta_patent_id = d.get("meta_patent_id", st.session_state.get("meta_patent_id", ""))
+                st.session_state[cache_flag] = True
+                break
+    except Exception as e:
+        print(f"cloud_load_on_startup error: {e}")
+
 
 # 4. Core Lifecycle Initialization & Early Tab Transition Check
 if "checklist_passed" not in st.session_state:
@@ -391,6 +432,9 @@ for meta in ["meta_krrn", "meta_krid", "meta_krrn_related", "meta_patent_id"]:
     if meta not in st.session_state:
         st.session_state[meta] = ""
 
+# Load data from Firestore on startup (populates shadow keys if draft exists)
+cloud_load_on_startup()
+
 # Early Tab Transition Logic
 detected_change = False
 old_tab = st.session_state.last_active_tab
@@ -403,9 +447,10 @@ elif st.session_state.active_calc_tab != old_tab:
     target_tab = st.session_state.active_calc_tab
 
 if detected_change:
-    # Save the old tab's inputs to persistent shadow keys
+    # Callbacks already saved widget values to shadow keys + Firestore,
+    # so we just need to snapshot any remaining unsaved widget state.
     snapshot_tab(old_tab)
-    # Sync core variables to cloud
+    # Extra safety: ensure cloud is up to date
     autosave_to_cloud()
     
     # Update all active tab markers
@@ -413,13 +458,11 @@ if detected_change:
     st.session_state.segmented_calc_tab = target_tab
     st.session_state.last_active_tab = target_tab
     
-    # Restore the new tab's inputs to widget keys, and delete other tabs' widget keys
+    # Restore the new tab's inputs from shadow keys (backed by Firestore)
     restore_tab(target_tab)
 else:
     # Regular rerun within the same tab:
-    # 1. Sync the active tab's widget values to persistent shadow keys
-    snapshot_tab(st.session_state.active_calc_tab)
-    # 2. Ensure active tab's widget keys are restored in case they were lost
+    # Restore tab's widget keys from shadow keys (Firestore-backed)
     restore_tab(st.session_state.active_calc_tab)
 
 def _pv(key, default=0.0):
@@ -678,7 +721,7 @@ if st.session_state.active_calc_tab == TABS_LIST[0]:
     
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("ขั้นตอนถัดไป (Next) ➡️", key="btn_next_tab1", use_container_width=True, type="primary"):
-        snapshot_state()
+        sync_project_meta()  # Ensure Tab 1 fields are saved to Firestore
         st.session_state.active_calc_tab = TABS_LIST[1]
         st.rerun()
 
@@ -855,11 +898,11 @@ elif st.session_state.active_calc_tab == TABS_LIST[1]:
     st.markdown("---")
     col_nav1, col_nav2 = st.columns(2)
     if col_nav1.button("⬅️ ย้อนกลับ (Back)", key="btn_back_tab2", use_container_width=True):
-        snapshot_state()
+        autosave_to_cloud()  # Ensure all Tab 2 data is saved
         st.session_state.active_calc_tab = TABS_LIST[0]
         st.rerun()
     if col_nav2.button("ขั้นตอนถัดไป (Next) ➡️", key="btn_next_tab2", use_container_width=True, type="primary"):
-        snapshot_state()
+        autosave_to_cloud()  # Ensure all Tab 2 data is saved
         st.session_state.active_calc_tab = TABS_LIST[2]
         st.rerun()
 
@@ -920,11 +963,11 @@ elif st.session_state.active_calc_tab == TABS_LIST[2]:
     st.markdown("---")
     col_nav1, col_nav2 = st.columns(2)
     if col_nav1.button("⬅️ ย้อนกลับ (Back)", key="btn_back_tab3", use_container_width=True):
-        snapshot_state()
+        autosave_to_cloud()  # Ensure all Tab 3 data is saved
         st.session_state.active_calc_tab = TABS_LIST[1]
         st.rerun()
     if col_nav2.button("ขั้นตอนถัดไป (Next) ➡️", key="btn_next_tab3", use_container_width=True, type="primary"):
-        snapshot_state()
+        autosave_to_cloud()  # Ensure all Tab 3 data is saved
         st.session_state.active_calc_tab = TABS_LIST[3]
         st.rerun()
 
@@ -1024,11 +1067,9 @@ elif st.session_state.active_calc_tab == TABS_LIST[3]:
     st.markdown("---")
     col_nav1, col_nav2 = st.columns(2)
     if col_nav1.button("⬅️ ย้อนกลับ (Back)", key="btn_back_tab4_new", use_container_width=True):
-        snapshot_state()
         st.session_state.active_calc_tab = TABS_LIST[2]
         st.rerun()
     if col_nav2.button("ขั้นตอนถัดไป (Next) ➡️", key="btn_next_tab4_new", use_container_width=True, type="primary"):
-        snapshot_state()
         st.session_state.active_calc_tab = TABS_LIST[4]
         st.rerun()
 
@@ -1043,13 +1084,6 @@ elif st.session_state.active_calc_tab == TABS_LIST[4]:
     total_impact = sum([current_results.get(s, 0.0) for s in ['B', 'C', 'D', 'E', 'F', 'G', 'K']])
     total_investment = sum([current_results.get(s, 0.0) for s in ['H', 'I', 'J']])
 
-    # Debug logging for results
-    try:
-        with open("calculator_debug.log", "a", encoding="utf-8") as f:
-            f.write(f"Tab 4 computed current_results: {current_results}\n")
-            f.write(f"total_impact: {total_impact}, total_investment: {total_investment}\n")
-    except:
-        pass
     
     st.markdown("#### 📊 ผลรวมการประมาณมูลค่า")
     col_t1, col_t2 = st.columns(2)
@@ -1294,16 +1328,16 @@ elif st.session_state.active_calc_tab == TABS_LIST[4]:
                 "metaKRID": m_krid_f,
                 "metaKRRNRelated": m_krrn_rel_f,
                 "metaPatentId": m_patent_f,
-                "sectionB": str(results.get("B", "")) if st.session_state.chk_B else "",
-                "sectionC": str(results.get("C", "")) if st.session_state.chk_C else "",
-                "sectionD": str(results.get("D", "")) if st.session_state.chk_D else "",
-                "sectionE": str(results.get("E", "")) if st.session_state.chk_E else "",
-                "sectionF": str(results.get("F", "")) if st.session_state.chk_F else "",
-                "sectionG": str(results.get("G", "")) if st.session_state.chk_G else "",
-                "sectionH": str(results.get("H", "")) if st.session_state.chk_H else "",
-                "sectionI": str(results.get("I", "")) if st.session_state.chk_I else "",
-                "sectionJ": str(results.get("J", "")) if st.session_state.chk_J else "",
-                "sectionK": str(results.get("K", "")) if st.session_state.chk_K else "",
+                "sectionB": str(results.get("B", "")) if _pc('B') else "",
+                "sectionC": str(results.get("C", "")) if _pc('C') else "",
+                "sectionD": str(results.get("D", "")) if _pc('D') else "",
+                "sectionE": str(results.get("E", "")) if _pc('E') else "",
+                "sectionF": str(results.get("F", "")) if _pc('F') else "",
+                "sectionG": str(results.get("G", "")) if _pc('G') else "",
+                "sectionH": str(results.get("H", "")) if _pc('H') else "",
+                "sectionI": str(results.get("I", "")) if _pc('I') else "",
+                "sectionJ": str(results.get("J", "")) if _pc('J') else "",
+                "sectionK": str(results.get("K", "")) if _pc('K') else "",
                 "totalImpact": str(total_impact),
                 "totalInvestment": str(total_investment)
             }
