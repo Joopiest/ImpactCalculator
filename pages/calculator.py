@@ -383,17 +383,7 @@ def autosave_to_cloud(silent=False):
                 if not silent:
                     st.toast("⚠️ ไม่สามารถบันทึก Cloud ได้")
 
-def restore_tab(tab_name, show_toast=False):
-    """Restores shadow keys to widget keys. Every tab entry uses this."""
-    w_keys, p_keys = get_tab_keys(tab_name)
-    found_data = False
-    for w_key, p_key in zip(w_keys, p_keys):
-        if p_key in st.session_state:
-            st.session_state[w_key] = st.session_state[p_key]
-            found_data = True
-    
-    if show_toast and found_data:
-        st.toast(f"📂 กู้คืนข้อมูล '{tab_name}' เรียบร้อย")
+
 
 def compute_results():
 
@@ -516,12 +506,9 @@ if detected_change:
     # Backup the now-updated shadow keys to the cloud immediately
     autosave_to_cloud()
     
-    # Prepare the NEW tab's widget keys so they show the correct values
-    restore_tab(target_tab)
+    pass
 else:
-    # Continuous sync while on the same tab
-    restore_tab(st.session_state.active_calc_tab)
-
+    pass
 
 # Render Header
 st.markdown("""
@@ -1100,7 +1087,6 @@ elif st.session_state.active_calc_tab == TABS_LIST[4]:
                     st.session_state.last_active_tab = target_tab
                     
                     # Map only active tab's widget keys
-                    restore_tab(target_tab)
                     
                     st.success("⚡ โหลดข้อมูลแบบร่างเรียบร้อยแล้ว!")
                     st.rerun()
