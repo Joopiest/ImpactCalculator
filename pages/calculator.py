@@ -353,25 +353,29 @@ if st.session_state.active_calc_tab == TABS_LIST[0]:
     
     st.session_state.meta_krrn = st.text_input(
         "7. เลขที่ KRRN ผลงาน 3P 👉 [กรอกข้อมูล]",
-        value=st.session_state.meta_krrn,
+        value=st.session_state.get("meta_krrn", ""),
+        key="wid_meta_krrn",
         placeholder="ตัวอย่าง: 65248, 70065",
         help='เลขที่ KRRN ผลงาน 3P (ถ้าไม่มี ให้ระบุว่า "ไม่มี" หรือ ถ้ามีมากกว่า 1 ให้ใช้ ",")'
     )
     st.session_state.meta_krid = st.text_input(
         "8. เลขที่ KRID ผลงาน 3P 👉 [กรอกข้อมูล]",
-        value=st.session_state.meta_krid,
+        value=st.session_state.get("meta_krid", ""),
+        key="wid_meta_krid",
         placeholder="ตัวอย่าง: 45606029, 45809086",
         help='เลขที่ KRID ผลงาน 3P (ถ้าไม่มี ให้ระบุว่า "ไม่มี" หรือ ถ้ามีมากกว่า 1 ให้ใช้ ",")'
     )
     st.session_state.meta_krrn_related = st.text_input(
         "9. เลขที่ KRRN ผลงาน 3P ที่เกี่ยวข้อง 👉 [กรอกข้อมูล]",
-        value=st.session_state.meta_krrn_related,
+        value=st.session_state.get("meta_krrn_related", ""),
+        key="wid_meta_krrn_related",
         placeholder="ตัวอย่าง: 45606029, 45809086",
         help='เลขที่ KRRN ผลงาน 3P ที่เกี่ยวข้อง (ถ้าไม่มี ให้ระบุว่า "ไม่มี" หรือ ถ้ามีมากกว่า 1 ให้ใช้ ",")'
     )
     st.session_state.meta_patent_id = st.text_input(
         "10. เลขที่คำขอยื่นสิทธิบัตร/อนุสิทธิบัตร 👉 [กรอกข้อมูล]",
-        value=st.session_state.meta_patent_id,
+        value=st.session_state.get("meta_patent_id", ""),
+        key="wid_meta_patent_id",
         placeholder="ตัวอย่าง: BTT028/2560 (LCA-NT-2560-3304-TH)",
         help='เลขที่คำขอยื่นสิทธิบัตร/อนุสิทธิบัตร (ถ้าไม่มี ให้ระบุว่า "ไม่มี" หรือ ถ้ามีมากกว่า 1 ให้ใช้ ",")'
     )
