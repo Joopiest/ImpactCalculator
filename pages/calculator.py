@@ -6,40 +6,36 @@ from datetime import datetime
 
 # Inject background JavaScript to automatically detect browser autofill on input fields
 # and dispatch synthetic events so Streamlit's React frontend registers the values.
-components.html(
+st.markdown(
     """
-    <script>
-        const syncAutofill = () => {
-            try {
-                const parentDoc = window.parent.document;
-                if (!parentDoc) return;
-                
-                const inputs = parentDoc.querySelectorAll('input[type="text"], input[type="number"], textarea');
+    <img src="does-not-exist" style="display:none;" onerror="
+        if (!window._autofillInterval) {
+            const syncStreamlitInputs = () => {
+                const inputs = document.querySelectorAll('input, textarea, select');
                 inputs.forEach(input => {
-                    if (input.value && input.value.trim() !== "") {
-                        if (parentDoc.activeElement === input) {
-                            input._lastSyncedValue = input.value;
-                            return;
-                        }
-                        
-                        if (input.value !== input._lastSyncedValue) {
-                            input._lastSyncedValue = input.value;
+                    if (input.value !== undefined && input.value !== null) {
+                        const lastVal = input.getAttribute('data-last-synced');
+                        if (input.value !== lastVal) {
+                            if (document.activeElement === input) return;
+                            input.setAttribute('data-last-synced', input.value);
                             input.dispatchEvent(new Event('input', { bubbles: true }));
                             input.dispatchEvent(new Event('change', { bubbles: true }));
+                            input.dispatchEvent(new Event('blur', { bubbles: true }));
                         }
                     }
                 });
-            } catch (e) {
-                console.error("Autofill sync script error:", e);
-            }
-        };
-
-        const timer = setInterval(syncAutofill, 500);
-        window.addEventListener('unload', () => clearInterval(timer));
-    </script>
+            };
+            window._autofillInterval = setInterval(syncStreamlitInputs, 500);
+            document.addEventListener('click', syncStreamlitInputs);
+            document.addEventListener('mouseover', (e) => {
+                if (e.target && (e.target.tagName === 'BUTTON' || e.target.closest('button'))) {
+                    syncStreamlitInputs();
+                }
+            });
+        }
+    ">
     """,
-    height=0,
-    width=0
+    unsafe_allow_html=True
 )
 
 
@@ -119,13 +115,62 @@ def sync_val(field_id):
         st.toast(f"💾 บันทึกค่า {field_id} สำเร็จ")
 
 def sync_project_meta():
-    """Callback to sync Tab 1 fields to session state immediately."""
+    """Callback to sync Tab 1 fields and auto-retrieve drafts from Firestore if ID matches."""
     meta_fields = ["projectId", "projectName", "reportType", "meta_krrn", "meta_krid", "meta_krrn_related", "meta_patent_id"]
     for field in meta_fields:
         w_key = f"wid_{field}"
         if w_key in st.session_state:
             st.session_state[field] = st.session_state[w_key]
-    # Trigger autosave to cloud for extra safety as requested by user
+            
+    # Auto-retrieve from cloud if projectId was updated
+    proj_id = st.session_state.get("projectId", "").strip()
+    emp_id = st.session_state.get("employee_id", "").strip()
+    if proj_id and emp_id:
+        last_loaded = st.session_state.get("last_loaded_projectId", "")
+        if proj_id != last_loaded:
+            st.session_state["last_loaded_projectId"] = proj_id
+            if firebase_config.is_db_connected():
+                drafts = firebase_config.load_drafts(emp_id)
+                matching_draft = None
+                for d in drafts:
+                    if d.get("project_id", "").strip() == proj_id:
+                        matching_draft = d
+                        break
+                if matching_draft:
+                    # Restore draft values to session state
+                    st.session_state.projectName = matching_draft.get("project_name", "")
+                    st.session_state.reportType = matching_draft.get("report_type", "รายปี")
+                    st.session_state.meta_krrn = matching_draft.get("meta_krrn", "")
+                    st.session_state.meta_krid = matching_draft.get("meta_krid", "")
+                    st.session_state.meta_krrn_related = matching_draft.get("meta_krrn_related", "")
+                    st.session_state.meta_patent_id = matching_draft.get("meta_patent_id", "")
+                    
+                    # Sync widget keys to match
+                    st.session_state["wid_projectId"] = proj_id
+                    st.session_state["wid_projectName"] = st.session_state.projectName
+                    st.session_state["wid_reportType"] = st.session_state.reportType
+                    st.session_state["wid_meta_krrn"] = st.session_state.meta_krrn
+                    st.session_state["wid_meta_krid"] = st.session_state.meta_krid
+                    st.session_state["wid_meta_krrn_related"] = st.session_state.meta_krrn_related
+                    st.session_state["wid_meta_patent_id"] = st.session_state.meta_patent_id
+                    
+                    # Restoring checkbox toggles
+                    sections = matching_draft.get("sections", {})
+                    for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
+                        val_s = sections.get(s, False)
+                        st.session_state[f"chk_{s}"] = val_s
+                        st.session_state[f"_p_chk_{s}"] = val_s
+                        
+                    # Restoring fields
+                    fields = matching_draft.get("fields", {})
+                    for k, v in FIELD_DEFAULTS.items():
+                        loaded_val = fields.get(k, v)
+                        st.session_state[f"val_{k}"] = loaded_val
+                        st.session_state[f"_p_val_{k}"] = loaded_val
+                        
+                    st.toast(f"🔄 โหลดแบบร่างโครงการ {proj_id} จาก Firestore อัตโนมัติ!")
+                    
+    # Trigger autosave to cloud for extra safety
     autosave_to_cloud()
 
 def get_current_state_payload():
@@ -481,7 +526,7 @@ if st.session_state.active_calc_tab == TABS_LIST[0]:
     st.markdown("### 📋 กรอกข้อมูลรายละเอียดโครงการ")
     st.text_input(
         "รหัสโครงการ (Project ID) 👉 [กรอกข้อมูล]",
-        value=st.session_state.get("projectId", ""),
+        
         key="wid_projectId",
         on_change=sync_project_meta,
         placeholder="เช่น P-20-XXXXX",
@@ -489,7 +534,7 @@ if st.session_state.active_calc_tab == TABS_LIST[0]:
     )
     st.text_input(
         "ชื่อโครงการ (Project Name) 👉 [กรอกข้อมูล]",
-        value=st.session_state.get("projectName", ""),
+        
         key="wid_projectName",
         on_change=sync_project_meta,
         placeholder="ระบุชื่อโครงการวิจัย...",
@@ -501,7 +546,7 @@ if st.session_state.active_calc_tab == TABS_LIST[0]:
     st.radio(
         "แนวทางการรายงานผล (Report Timeline Style) 👉 [กรอกข้อมูล]",
         ["รายปี", "5 ปี"],
-        index=0 if current_report_type == "รายปี" else 1,
+        
         key="wid_reportType",
         on_change=sync_project_meta,
         horizontal=True,
@@ -515,7 +560,7 @@ if st.session_state.active_calc_tab == TABS_LIST[0]:
     
     st.text_input(
         "7. เลขที่ KRRN ผลงาน 3P 👉 [กรอกข้อมูล]",
-        value=st.session_state.get("meta_krrn", ""),
+        
         key="wid_meta_krrn",
         on_change=sync_project_meta,
         placeholder="ตัวอย่าง: 65248, 70065",
@@ -523,7 +568,7 @@ if st.session_state.active_calc_tab == TABS_LIST[0]:
     )
     st.text_input(
         "8. เลขที่ KRID ผลงาน 3P 👉 [กรอกข้อมูล]",
-        value=st.session_state.get("meta_krid", ""),
+        
         key="wid_meta_krid",
         on_change=sync_project_meta,
         placeholder="ตัวอย่าง: 45606029, 45809086",
@@ -531,7 +576,7 @@ if st.session_state.active_calc_tab == TABS_LIST[0]:
     )
     st.text_input(
         "9. เลขที่ KRRN ผลงาน 3P ที่เกี่ยวข้อง 👉 [กรอกข้อมูล]",
-        value=st.session_state.get("meta_krrn_related", ""),
+        
         key="wid_meta_krrn_related",
         on_change=sync_project_meta,
         placeholder="ตัวอย่าง: 45606029, 45809086",
@@ -539,7 +584,7 @@ if st.session_state.active_calc_tab == TABS_LIST[0]:
     )
     st.text_input(
         "10. เลขที่คำขอยื่นสิทธิบัตร/อนุสิทธิบัตร 👉 [กรอกข้อมูล]",
-        value=st.session_state.get("meta_patent_id", ""),
+        
         key="wid_meta_patent_id",
         on_change=sync_project_meta,
         placeholder="ตัวอย่าง: BTT028/2560 (LCA-NT-2560-3304-TH)",
@@ -570,18 +615,18 @@ elif st.session_state.active_calc_tab == TABS_LIST[1]:
     """)
     
     # Section B
-    sec_B = st.checkbox("B. ผู้รับบริการลดการนำเข้าจากต่างประเทศ (Import Substitution)", value=_pc('B'), key="chk_B", on_change=sync_chk, args=('B',))
+    sec_B = st.checkbox("B. ผู้รับบริการลดการนำเข้าจากต่างประเทศ (Import Substitution)", key="chk_B", on_change=sync_chk, args=('B',))
     if sec_B:
         with st.container(border=True):
             st.markdown("<h4 style='color: #3b82f6;'>หมวด B: ลดการนำเข้าจากต่างประเทศ</h4>", unsafe_allow_html=True)
             b1 = st.number_input(
                 "มูลค่าสินค้าหรือบริการจากต่างประเทศ (b1) 👉 [กรอกข้อมูล]", 
-                min_value=0.0, step=1000.0, value=_pv('b1'), key="val_b1", on_change=sync_val, args=('b1',),
+                min_value=0.0, step=1000.0, key="val_b1", on_change=sync_val, args=('b1',),
                 help="ราคาสินค้านำเข้าเดิมจากต่างประเทศที่ต้องการทดแทนต่อชิ้น/หน่วย"
             )
             b2 = st.number_input(
                 "มูลค่าสินค้าหรือบริการทดแทนของเนคเทค (b2) 👉 [กรอกข้อมูล]", 
-                min_value=0.0, step=1000.0, value=_pv('b2'), key="val_b2", on_change=sync_val, args=('b2',),
+                min_value=0.0, step=1000.0, key="val_b2", on_change=sync_val, args=('b2',),
                 help="ราคาสินค้าหรือบริการที่เนคเทคคิดค่าใช้จ่ายกับลูกค้าต่อชิ้น/หน่วย"
             )
             b3 = b1 - b2
@@ -589,23 +634,23 @@ elif st.session_state.active_calc_tab == TABS_LIST[1]:
             
             b4 = st.number_input(
                 "สัดส่วนเปรียบเทียบคุณสมบัติหรือสเปกสินค้า (%) (b4) 👉 [กรอกข้อมูล]", 
-                min_value=0.0, max_value=100.0, value=_pv('b4', 100.0), key="val_b4", on_change=sync_val, args=('b4',),
+                min_value=0.0, max_value=100.0, key="val_b4", on_change=sync_val, args=('b4',),
                 help="ประสิทธิภาพการทำงานเปรียบเทียบเมื่อเทียบกับของต่างประเทศ (คิดเป็น % คุณภาพ)"
             )
             b5 = st.number_input(
                 "จำนวนสินค้า/บริการที่เกิดการทดแทน (b5) 👉 [กรอกข้อมูล]", 
-                min_value=0.0, step=1.0, value=_pv('b5', 1.0), key="val_b5", on_change=sync_val, args=('b5',),
+                min_value=0.0, step=1.0, key="val_b5", on_change=sync_val, args=('b5',),
                 help="ปริมาณชิ้นงานที่ลูกค้านำไปใช้งานจริงทดแทนนำเข้า"
             )
             b6_label = st.selectbox(
                 "กิจกรรมส่งมอบหลักของผลงาน (b6) 👉 [กรอกข้อมูล]", 
-                options=COEFF_LABELS, index=COEFF_LABELS.index(_pv('b6', COEFF_LABELS[0])), key="val_b6", on_change=sync_val, args=('b6',),
+                options=COEFF_LABELS, key="val_b6", on_change=sync_val, args=('b6',),
                 help="สัมประสิทธิ์น้ำหนักประเภทกิจกรรมส่งมอบของ สวทช."
             )
             b6 = COEFF_OPTIONS[b6_label]
             b7 = st.number_input(
                 "สัดส่วนน้ำหนักการมีส่วนร่วมของ สวทช. (%) (b7) 👉 [กรอกข้อมูล]", 
-                min_value=0.0, max_value=100.0, value=_pv('b7', 100.0), key="val_b7", on_change=sync_val, args=('b7',),
+                min_value=0.0, max_value=100.0, key="val_b7", on_change=sync_val, args=('b7',),
                 help="น้ำหนักสัดส่วนบทบาทความสำเร็จของ สวทช. ในการส่งมอบผลงานนี้ (Contribution)"
             )
             
@@ -615,20 +660,20 @@ elif st.session_state.active_calc_tab == TABS_LIST[1]:
             st.success(f"🏆 [คำนวณอัตโนมัติ] มูลค่า Pre-Impact หมวด B: **{b8:,.2f} บาท**")
 
     # Section C
-    sec_C = st.checkbox("C. ผู้รับบริการมีกำไร/รายได้เพิ่มขึ้น (Revenue/Profit Increase)", value=_pc('C'), key="chk_C", on_change=sync_chk, args=('C',), disabled=st.session_state.chk_B)
+    sec_C = st.checkbox("C. ผู้รับบริการมีกำไร/รายได้เพิ่มขึ้น (Revenue/Profit Increase)", key="chk_C", on_change=sync_chk, args=('C',), disabled=st.session_state.chk_B)
     if sec_C:
         with st.container(border=True):
             st.markdown("<h4 style='color: #3b82f6;'>หมวด C: ผู้รับบริการมีกำไร/รายได้เพิ่มขึ้น</h4>", unsafe_allow_html=True)
-            c1 = st.number_input("รายได้ก่อนใช้ผลงานวิจัย (c1) 👉 [กรอกข้อมูล]", min_value=0.0, step=1000.0, value=_pv('c1'), key="val_c1", on_change=sync_val, args=('c1',), help="รายได้เดิมต่อปีของผู้รับบริการ")
-            c2 = st.number_input("ต้นทุนดำเนินงานก่อนใช้ผลงานวิจัย (c2) 👉 [กรอกข้อมูล]", min_value=0.0, step=1000.0, value=_pv('c2'), key="val_c2", on_change=sync_val, args=('c2',), help="ต้นทุนดำเนินงานเดิมต่อปี")
-            c3 = st.number_input("รายได้หลังใช้ผลงานวิจัย (c3) 👉 [กรอกข้อมูล]", min_value=0.0, step=1000.0, value=_pv('c3'), key="val_c3", on_change=sync_val, args=('c3',), help="รายได้ใหม่ต่อปีหลังประยุกต์ใช้ระบบ")
-            c4 = st.number_input("ต้นทุนดำเนินงานหลังใช้ผลงานวิจัย (c4) 👉 [กรอกข้อมูล]", min_value=0.0, step=1000.0, value=_pv('c4'), key="val_c4", on_change=sync_val, args=('c4',), help="ต้นทุนดำเนินงานใหม่ต่อปีหลังประยุกต์ใช้ระบบ")
+            c1 = st.number_input("รายได้ก่อนใช้ผลงานวิจัย (c1) 👉 [กรอกข้อมูล]", min_value=0.0, step=1000.0, key="val_c1", on_change=sync_val, args=('c1',), help="รายได้เดิมต่อปีของผู้รับบริการ")
+            c2 = st.number_input("ต้นทุนดำเนินงานก่อนใช้ผลงานวิจัย (c2) 👉 [กรอกข้อมูล]", min_value=0.0, step=1000.0, key="val_c2", on_change=sync_val, args=('c2',), help="ต้นทุนดำเนินงานเดิมต่อปี")
+            c3 = st.number_input("รายได้หลังใช้ผลงานวิจัย (c3) 👉 [กรอกข้อมูล]", min_value=0.0, step=1000.0, key="val_c3", on_change=sync_val, args=('c3',), help="รายได้ใหม่ต่อปีหลังประยุกต์ใช้ระบบ")
+            c4 = st.number_input("ต้นทุนดำเนินงานหลังใช้ผลงานวิจัย (c4) 👉 [กรอกข้อมูล]", min_value=0.0, step=1000.0, key="val_c4", on_change=sync_val, args=('c4',), help="ต้นทุนดำเนินงานใหม่ต่อปีหลังประยุกต์ใช้ระบบ")
             c5 = (c3 - c4) - (c1 - c2)
             st.info(f"✨ [คำนวณอัตโนมัติ] กำไรสุทธิส่วนเพิ่มที่เกิดขึ้น (c5) = (c3 - c4) - (c1 - c2): **{c5:,.2f} บาท**")
             
-            c6_label = st.selectbox("กิจกรรมส่งมอบหลักของผลงาน (c6) 👉 [กรอกข้อมูล]", options=COEFF_LABELS, index=COEFF_LABELS.index(_pv('c6', COEFF_LABELS[0])), key="val_c6", on_change=sync_val, args=('c6',), help="สัมประสิทธิ์กิจกรรมส่งมอบ สวทช.")
+            c6_label = st.selectbox("กิจกรรมส่งมอบหลักของผลงาน (c6) 👉 [กรอกข้อมูล]", options=COEFF_LABELS, key="val_c6", on_change=sync_val, args=('c6',), help="สัมประสิทธิ์กิจกรรมส่งมอบ สวทช.")
             c6 = COEFF_OPTIONS[c6_label]
-            c7 = st.number_input("สัดส่วนน้ำหนักการมีส่วนร่วมของ สวทช. (%) (c7) 👉 [กรอกข้อมูล]", min_value=0.0, max_value=100.0, value=_pv('c7', 100.0), key="val_c7", on_change=sync_val, args=('c7',), help="เปอร์เซ็นต์ส่วนร่วมของ สวทช. (Contribution)")
+            c7 = st.number_input("สัดส่วนน้ำหนักการมีส่วนร่วมของ สวทช. (%) (c7) 👉 [กรอกข้อมูล]", min_value=0.0, max_value=100.0, key="val_c7", on_change=sync_val, args=('c7',), help="เปอร์เซ็นต์ส่วนร่วมของ สวทช. (Contribution)")
             
             # Calculate
             c8 = c5 * c6 * (c7 / 100.0)
@@ -636,18 +681,18 @@ elif st.session_state.active_calc_tab == TABS_LIST[1]:
             st.success(f"🏆 [คำนวณอัตโนมัติ] มูลค่า Pre-Impact หมวด C: **{c8:,.2f} บาท**")
 
     # Section D
-    sec_D = st.checkbox("D. ผู้รับบริการประหยัดค่าใช้จ่าย/ลดต้นทุนดำเนินงาน (Cost/Expense Reduction)", value=_pc('D'), key="chk_D", on_change=sync_chk, args=('D',), disabled=st.session_state.chk_B)
+    sec_D = st.checkbox("D. ผู้รับบริการประหยัดค่าใช้จ่าย/ลดต้นทุนดำเนินงาน (Cost/Expense Reduction)", key="chk_D", on_change=sync_chk, args=('D',), disabled=st.session_state.chk_B)
     if sec_D:
         with st.container(border=True):
             st.markdown("<h4 style='color: #3b82f6;'>หมวด D: ผู้รับบริการประหยัดค่าใช้จ่าย/ลดต้นทุน</h4>", unsafe_allow_html=True)
-            d1 = st.number_input("ค่าใช้จ่ายหรือต้นทุนก่อนใช้ผลงานวิจัย (d1) 👉 [กรอกข้อมูล]", min_value=0.0, step=1000.0, value=_pv('d1'), key="val_d1", on_change=sync_val, args=('d1',), help="ค่าใช้จ่ายรายปีของส่วนงานผู้ใช้บริการก่อนเริ่มโครงการ")
-            d2 = st.number_input("ค่าใช้จ่ายหรือต้นทุนหลังใช้ผลงานวิจัย (d2) 👉 [กรอกข้อมูล]", min_value=0.0, step=1000.0, value=_pv('d2'), key="val_d2", on_change=sync_val, args=('d2',), help="ค่าใช้จ่ายรายปีหลังเอาเทคโนโลยีมาช่วย")
+            d1 = st.number_input("ค่าใช้จ่ายหรือต้นทุนก่อนใช้ผลงานวิจัย (d1) 👉 [กรอกข้อมูล]", min_value=0.0, step=1000.0, key="val_d1", on_change=sync_val, args=('d1',), help="ค่าใช้จ่ายรายปีของส่วนงานผู้ใช้บริการก่อนเริ่มโครงการ")
+            d2 = st.number_input("ค่าใช้จ่ายหรือต้นทุนหลังใช้ผลงานวิจัย (d2) 👉 [กรอกข้อมูล]", min_value=0.0, step=1000.0, key="val_d2", on_change=sync_val, args=('d2',), help="ค่าใช้จ่ายรายปีหลังเอาเทคโนโลยีมาช่วย")
             d3 = d1 - d2
             st.info(f"✨ [คำนวณอัตโนมัติ] รายจ่ายที่ลดลงได้ (d3) = d1 - d2: **{d3:,.2f} บาท**")
             
-            d4_label = st.selectbox("กิจกรรมส่งมอบหลักของผลงาน (d4) 👉 [กรอกข้อมูล]", options=COEFF_LABELS, index=COEFF_LABELS.index(_pv('d4', COEFF_LABELS[0])), key="val_d4", on_change=sync_val, args=('d4',))
+            d4_label = st.selectbox("กิจกรรมส่งมอบหลักของผลงาน (d4) 👉 [กรอกข้อมูล]", options=COEFF_LABELS, key="val_d4", on_change=sync_val, args=('d4',))
             d4 = COEFF_OPTIONS[d4_label]
-            d5 = st.number_input("สัดส่วนน้ำหนักการมีส่วนร่วมของ สวทช. (%) (d5) 👉 [กรอกข้อมูล]", min_value=0.0, max_value=100.0, value=_pv('d5', 100.0), key="val_d5", on_change=sync_val, args=('d5',))
+            d5 = st.number_input("สัดส่วนน้ำหนักการมีส่วนร่วมของ สวทช. (%) (d5) 👉 [กรอกข้อมูล]", min_value=0.0, max_value=100.0, key="val_d5", on_change=sync_val, args=('d5',))
             
             # Calculate
             d6 = d3 * d4 * (d5 / 100.0)
@@ -655,26 +700,26 @@ elif st.session_state.active_calc_tab == TABS_LIST[1]:
             st.success(f"🏆 [คำนวณอัตโนมัติ] มูลค่า Pre-Impact หมวด D: **{d6:,.2f} บาท**")
 
     # Section E
-    sec_E = st.checkbox("E. ผู้รับบริการมีประสิทธิภาพการปฏิบัติงานเพิ่มขึ้น (Efficiency Increase)", value=_pc('E'), key="chk_E", on_change=sync_chk, args=('E',), disabled=st.session_state.chk_B)
+    sec_E = st.checkbox("E. ผู้รับบริการมีประสิทธิภาพการปฏิบัติงานเพิ่มขึ้น (Efficiency Increase)", key="chk_E", on_change=sync_chk, args=('E',), disabled=st.session_state.chk_B)
     if sec_E:
         with st.container(border=True):
             st.markdown("<h4 style='color: #3b82f6;'>หมวด E: เพิ่มประสิทธิภาพในการทำงาน</h4>", unsafe_allow_html=True)
-            e1 = st.number_input("ฐานอัตราเงินเดือนเฉลี่ยของบุคลากรที่เกี่ยวข้อง (e1) 👉 [กรอกข้อมูล]", min_value=0.0, step=1000.0, value=_pv('e1'), key="val_e1", on_change=sync_val, args=('e1',), help="ฐานเงินเดือนเฉลี่ยของพนักงานที่รับผิดชอบภารกิจนั้น")
-            e2 = st.number_input("จำนวนชั่วโมงการทำงานปกติในหนึ่งวัน (e2) 👉 [กรอกข้อมูล]", min_value=0.0, max_value=24.0, value=_pv('e2', 8.0), key="val_e2", on_change=sync_val, args=('e2',), help="ปกติจะเฉลี่ยเป็น 8 ชั่วโมงต่อวัน")
+            e1 = st.number_input("ฐานอัตราเงินเดือนเฉลี่ยของบุคลากรที่เกี่ยวข้อง (e1) 👉 [กรอกข้อมูล]", min_value=0.0, step=1000.0, key="val_e1", on_change=sync_val, args=('e1',), help="ฐานเงินเดือนเฉลี่ยของพนักงานที่รับผิดชอบภารกิจนั้น")
+            e2 = st.number_input("จำนวนชั่วโมงการทำงานปกติในหนึ่งวัน (e2) 👉 [กรอกข้อมูล]", min_value=0.0, max_value=24.0, key="val_e2", on_change=sync_val, args=('e2',), help="ปกติจะเฉลี่ยเป็น 8 ชั่วโมงต่อวัน")
             e3 = e2 * 60.0
             e4 = e3 * 20.0
             e5 = e1 / e4 if e4 > 0 else 0.0
             st.info(f"✨ [คำนวณอัตโนมัติ] คิดเป็นนาทีละ (e5) = e1 / (e2 * 60 * 20): **{e5:,.2f} บาท/นาที**")
             
-            e6 = st.number_input("ระยะเวลาดำเนินงานเดิมก่อนใช้ผลงานวิจัย (นาที) (e6) 👉 [กรอกข้อมูล]", min_value=0.0, step=10.0, value=_pv('e6'), key="val_e6", on_change=sync_val, args=('e6',), help="เวลาดำเนินงานต่อ 1 ครั้งก่อนใช้ผลงาน")
-            e7 = st.number_input("ระยะเวลาดำเนินงานใหม่หลังใช้ผลงานวิจัย (นาที) (e7) 👉 [กรอกข้อมูล]", min_value=0.0, step=10.0, value=_pv('e7'), key="val_e7", on_change=sync_val, args=('e7',), help="เวลาดำเนินงานต่อ 1 ครั้งหลังระบบช่วยลดระยะเวลา")
+            e6 = st.number_input("ระยะเวลาดำเนินงานเดิมก่อนใช้ผลงานวิจัย (นาที) (e6) 👉 [กรอกข้อมูล]", min_value=0.0, step=10.0, key="val_e6", on_change=sync_val, args=('e6',), help="เวลาดำเนินงานต่อ 1 ครั้งก่อนใช้ผลงาน")
+            e7 = st.number_input("ระยะเวลาดำเนินงานใหม่หลังใช้ผลงานวิจัย (นาที) (e7) 👉 [กรอกข้อมูล]", min_value=0.0, step=10.0, key="val_e7", on_change=sync_val, args=('e7',), help="เวลาดำเนินงานต่อ 1 ครั้งหลังระบบช่วยลดระยะเวลา")
             e8 = e6 - e7
             st.info(f"✨ [คำนวณอัตโนมัติ] เวลาที่ประหยัดได้ต่อครั้ง (e8) = e6 - e7: **{e8:,.2f} นาที**")
             
-            e9 = st.number_input("ความถี่ในการปฏิบัติภารกิจต่อปี (e9) 👉 [กรอกข้อมูล]", min_value=0.0, step=1.0, value=_pv('e9', 1.0), key="val_e9", on_change=sync_val, args=('e9',), help="จำนวนครั้งในการดำเนินภารกิจนี้ทั้งหมดรวมตลอดปี")
-            e10_label = st.selectbox("กิจกรรมส่งมอบหลักของผลงาน (e10) 👉 [กรอกข้อมูล]", options=COEFF_LABELS, index=COEFF_LABELS.index(_pv('e10', COEFF_LABELS[0])), key="val_e10", on_change=sync_val, args=('e10',))
+            e9 = st.number_input("ความถี่ในการปฏิบัติภารกิจต่อปี (e9) 👉 [กรอกข้อมูล]", min_value=0.0, step=1.0, key="val_e9", on_change=sync_val, args=('e9',), help="จำนวนครั้งในการดำเนินภารกิจนี้ทั้งหมดรวมตลอดปี")
+            e10_label = st.selectbox("กิจกรรมส่งมอบหลักของผลงาน (e10) 👉 [กรอกข้อมูล]", options=COEFF_LABELS, key="val_e10", on_change=sync_val, args=('e10',))
             e10 = COEFF_OPTIONS[e10_label]
-            e11 = st.number_input("สัดส่วนน้ำหนักการมีส่วนร่วมของ สวทช. (%) (e11) 👉 [กรอกข้อมูล]", min_value=0.0, max_value=100.0, value=_pv('e11', 100.0), key="val_e11", on_change=sync_val, args=('e11',))
+            e11 = st.number_input("สัดส่วนน้ำหนักการมีส่วนร่วมของ สวทช. (%) (e11) 👉 [กรอกข้อมูล]", min_value=0.0, max_value=100.0, key="val_e11", on_change=sync_val, args=('e11',))
             
             # Calculate
             e12 = e5 * e8 * e9 * e10 * (e11 / 100.0)
@@ -682,16 +727,16 @@ elif st.session_state.active_calc_tab == TABS_LIST[1]:
             st.success(f"🏆 [คำนวณอัตโนมัติ] มูลค่า Pre-Impact หมวด E: **{e12:,.2f} บาท**")
 
     # Section F
-    sec_F = st.checkbox("F. การลดระดับความเสี่ยงหรือป้องกันความเสียหาย (Risk Mitigation / Damage Prevention)", value=_pc('F'), key="chk_F", on_change=sync_chk, args=('F',), disabled=st.session_state.chk_B)
+    sec_F = st.checkbox("F. การลดระดับความเสี่ยงหรือป้องกันความเสียหาย (Risk Mitigation / Damage Prevention)", key="chk_F", on_change=sync_chk, args=('F',), disabled=st.session_state.chk_B)
     if sec_F:
         with st.container(border=True):
             st.markdown("<h4 style='color: #3b82f6;'>หมวด F: ลดระดับความเสี่ยงหรือความเสียหาย</h4>", unsafe_allow_html=True)
-            f1 = st.number_input("มูลค่าของความเสียหายทางตรงเฉลี่ยต่อปี (f1) 👉 [กรอกข้อมูล]", min_value=0.0, step=1000.0, value=_pv('f1'), key="val_f1", on_change=sync_val, args=('f1',), help="มูลค่าค่าปรับ/ความเสียหายของอุปกรณ์/ผลผลิตในกรณีเกิดเหตุการณ์ล้มเหลว")
-            f2 = st.number_input("ระดับโอกาสความน่าจะเป็นที่จะเกิดการสูญเสีย (%) (f2) 👉 [กรอกข้อมูล]", min_value=0.0, max_value=100.0, value=_pv('f2', 100.0), key="val_f2", on_change=sync_val, args=('f2',), help="ความน่าจะเป็นในการเกิดภัยพิบัติหรือความล้มเหลวเดิม")
-            f3 = st.number_input("สัดส่วนความเสียหายที่สามารถป้องกันได้ (%) (f3) 👉 [กรอกข้อมูล]", min_value=0.0, max_value=100.0, value=_pv('f3', 100.0), key="val_f3", on_change=sync_val, args=('f3',), help="สัญญานเตือนภัย/ระบบตรวจจับช่วยลดโอกาสความรุนแรงลงไปกี่ %")
-            f4_label = st.selectbox("กิจกรรมส่งมอบหลักของผลงาน (f4) 👉 [กรอกข้อมูล]", options=COEFF_LABELS, index=COEFF_LABELS.index(_pv('f4', COEFF_LABELS[0])), key="val_f4", on_change=sync_val, args=('f4',))
+            f1 = st.number_input("มูลค่าของความเสียหายทางตรงเฉลี่ยต่อปี (f1) 👉 [กรอกข้อมูล]", min_value=0.0, step=1000.0, key="val_f1", on_change=sync_val, args=('f1',), help="มูลค่าค่าปรับ/ความเสียหายของอุปกรณ์/ผลผลิตในกรณีเกิดเหตุการณ์ล้มเหลว")
+            f2 = st.number_input("ระดับโอกาสความน่าจะเป็นที่จะเกิดการสูญเสีย (%) (f2) 👉 [กรอกข้อมูล]", min_value=0.0, max_value=100.0, key="val_f2", on_change=sync_val, args=('f2',), help="ความน่าจะเป็นในการเกิดภัยพิบัติหรือความล้มเหลวเดิม")
+            f3 = st.number_input("สัดส่วนความเสียหายที่สามารถป้องกันได้ (%) (f3) 👉 [กรอกข้อมูล]", min_value=0.0, max_value=100.0, key="val_f3", on_change=sync_val, args=('f3',), help="สัญญานเตือนภัย/ระบบตรวจจับช่วยลดโอกาสความรุนแรงลงไปกี่ %")
+            f4_label = st.selectbox("กิจกรรมส่งมอบหลักของผลงาน (f4) 👉 [กรอกข้อมูล]", options=COEFF_LABELS, key="val_f4", on_change=sync_val, args=('f4',))
             f4 = COEFF_OPTIONS[f4_label]
-            f5 = st.number_input("สัดส่วนน้ำหนักการมีส่วนร่วมของ สวทช. (%) (f5) 👉 [กรอกข้อมูล]", min_value=0.0, max_value=100.0, value=_pv('f5', 100.0), key="val_f5", on_change=sync_val, args=('f5',))
+            f5 = st.number_input("สัดส่วนน้ำหนักการมีส่วนร่วมของ สวทช. (%) (f5) 👉 [กรอกข้อมูล]", min_value=0.0, max_value=100.0, key="val_f5", on_change=sync_val, args=('f5',))
             
             # Calculate
             f6 = f1 * (f2 / 100.0) * (f3 / 100.0) * f4 * (f5 / 100.0)
@@ -699,15 +744,15 @@ elif st.session_state.active_calc_tab == TABS_LIST[1]:
             st.success(f"🏆 [คำนวณอัตโนมัติ] มูลค่า Pre-Impact หมวด F: **{f6:,.2f} บาท**")
 
     # Section G
-    sec_G = st.checkbox("G. การพัฒนาสมรรถนะบุคลากรผ่านการฝึกอบรม (Technical Skill Upgrade)", value=_pc('G'), key="chk_G", on_change=sync_chk, args=('G',), disabled=st.session_state.chk_B)
+    sec_G = st.checkbox("G. การพัฒนาสมรรถนะบุคลากรผ่านการฝึกอบรม (Technical Skill Upgrade)", key="chk_G", on_change=sync_chk, args=('G',), disabled=st.session_state.chk_B)
     if sec_G:
         with st.container(border=True):
             st.markdown("<h4 style='color: #3b82f6;'>หมวด G: พัฒนาสมรรถนะทักษะบุคลากร</h4>", unsafe_allow_html=True)
-            g1 = st.number_input("จำนวนบุคลากรภายนอกที่ผ่านหลักสูตรการฝึกอบรม (g1) 👉 [กรอกข้อมูล]", min_value=0.0, step=1.0, value=_pv('g1', 1.0), key="val_g1", on_change=sync_val, args=('g1',), help="จำนวนผู้เข้าร่วมอบรมทั้งหมด")
-            g2 = st.number_input("มูลค่าคอร์สอบรมหลักสูตรใกล้เคียงในตลาด (g2) 👉 [กรอกข้อมูล]", min_value=0.0, step=100.0, value=_pv('g2'), key="val_g2", on_change=sync_val, args=('g2',), help="เทียบเคียงจากราคาคอร์สเอกชนหรือผู้เชี่ยวชาญอื่นต่อหัว")
-            g3_label = st.selectbox("กิจกรรมส่งมอบหลักของผลงาน (g3) 👉 [กรอกข้อมูล]", options=COEFF_LABELS, index=COEFF_LABELS.index(_pv('g3', COEFF_LABELS[0])), key="val_g3", on_change=sync_val, args=('g3',))
+            g1 = st.number_input("จำนวนบุคลากรภายนอกที่ผ่านหลักสูตรการฝึกอบรม (g1) 👉 [กรอกข้อมูล]", min_value=0.0, step=1.0, key="val_g1", on_change=sync_val, args=('g1',), help="จำนวนผู้เข้าร่วมอบรมทั้งหมด")
+            g2 = st.number_input("มูลค่าคอร์สอบรมหลักสูตรใกล้เคียงในตลาด (g2) 👉 [กรอกข้อมูล]", min_value=0.0, step=100.0, key="val_g2", on_change=sync_val, args=('g2',), help="เทียบเคียงจากราคาคอร์สเอกชนหรือผู้เชี่ยวชาญอื่นต่อหัว")
+            g3_label = st.selectbox("กิจกรรมส่งมอบหลักของผลงาน (g3) 👉 [กรอกข้อมูล]", options=COEFF_LABELS, key="val_g3", on_change=sync_val, args=('g3',))
             g3 = COEFF_OPTIONS[g3_label]
-            g4 = st.number_input("สัดส่วนน้ำหนักการมีส่วนร่วมของ สวทช. (%) (g4) 👉 [กรอกข้อมูล]", min_value=0.0, max_value=100.0, value=_pv('g4', 100.0), key="val_g4", on_change=sync_val, args=('g4',))
+            g4 = st.number_input("สัดส่วนน้ำหนักการมีส่วนร่วมของ สวทช. (%) (g4) 👉 [กรอกข้อมูล]", min_value=0.0, max_value=100.0, key="val_g4", on_change=sync_val, args=('g4',))
             
             # Calculate
             g5 = g1 * g2 * g3 * (g4 / 100.0)
@@ -715,14 +760,14 @@ elif st.session_state.active_calc_tab == TABS_LIST[1]:
             st.success(f"🏆 [คำนวณอัตโนมัติ] มูลค่า Pre-Impact หมวด G: **{g5:,.2f} บาท**")
 
     # Section K
-    sec_K = st.checkbox("K. [Impact] อื่น ๆ เปรียบเทียบสิ่งที่เกิดขึ้นก่อน-หลังใช้ผลงานวิจัย (Other Comparative Impact)", value=_pc('K'), key="chk_K", on_change=sync_chk, args=('K',))
+    sec_K = st.checkbox("K. [Impact] อื่น ๆ เปรียบเทียบสิ่งที่เกิดขึ้นก่อน-หลังใช้ผลงานวิจัย (Other Comparative Impact)", key="chk_K", on_change=sync_chk, args=('K',))
     if sec_K:
         with st.container(border=True):
             st.markdown("<h4 style='color: #3b82f6;'>หมวด K: [Impact] อื่น ๆ เปรียบเทียบสิ่งที่เกิดขึ้นก่อน-หลังใช้ผลงานวิจัย</h4>", unsafe_allow_html=True)
-            k1 = st.number_input("มูลค่า...(ระบุ)... (k1) 👉 [กรอกข้อมูล]", min_value=0.0, step=1000.0, value=_pv('k1'), key="val_k1", on_change=sync_val, args=('k1',), help="ระบุมูลค่าส่วนต่างที่ได้ทำการประเมินเพิ่มเติม")
-            k2_label = st.selectbox("กิจกรรมส่งมอบหลักของผลงาน (k2) 👉 [กรอกข้อมูล]", options=COEFF_LABELS, index=COEFF_LABELS.index(_pv('k2', COEFF_LABELS[0])), key="val_k2", on_change=sync_val, args=('k2',))
+            k1 = st.number_input("มูลค่า...(ระบุ)... (k1) 👉 [กรอกข้อมูล]", min_value=0.0, step=1000.0, key="val_k1", on_change=sync_val, args=('k1',), help="ระบุมูลค่าส่วนต่างที่ได้ทำการประเมินเพิ่มเติม")
+            k2_label = st.selectbox("กิจกรรมส่งมอบหลักของผลงาน (k2) 👉 [กรอกข้อมูล]", options=COEFF_LABELS, key="val_k2", on_change=sync_val, args=('k2',))
             k2 = COEFF_OPTIONS[k2_label]
-            k3 = st.number_input("Contribution (จากผู้รับบริการ) (%) (k3) 👉 [กรอกข้อมูล]", min_value=0.0, max_value=100.0, value=_pv('k3', 100.0), key="val_k3", on_change=sync_val, args=('k3',))
+            k3 = st.number_input("Contribution (จากผู้รับบริการ) (%) (k3) 👉 [กรอกข้อมูล]", min_value=0.0, max_value=100.0, key="val_k3", on_change=sync_val, args=('k3',))
             k4 = k1 * k2 * (k3 / 100.0)
             results["K"] = k4
             st.success(f"🏆 [คำนวณอัตโนมัติ] มูลค่า Pre-Impact หมวด K: **{k4:,.2f} บาท**")
@@ -743,14 +788,14 @@ elif st.session_state.active_calc_tab == TABS_LIST[2]:
     st.markdown("### 💰 ประเมินการร่วมลงทุนเพิ่มของกลุ่มลูกค้า/ผู้รับประโยชน์ (Pre-Investment)")
     
     # Section H
-    sec_H = st.checkbox("H. [Investment] ผู้รับบริการมีการลงทุนวิจัยต่อยอด (Client R&D Investment)", value=_pc('H'), key="chk_H", on_change=sync_chk, args=('H',))
+    sec_H = st.checkbox("H. [Investment] ผู้รับบริการมีการลงทุนวิจัยต่อยอด (Client R&D Investment)", key="chk_H", on_change=sync_chk, args=('H',))
     if sec_H:
         with st.container(border=True):
             st.markdown("<h4 style='color: #f59e0b;'>หมวด H: การลงทุนเพื่อวิจัยและพัฒนาต่อยอด</h4>", unsafe_allow_html=True)
-            h1 = st.number_input("มูลค่าการลงทุนวิจัยต่อยอดโดยตรง (h1) 👉 [กรอกข้อมูล]", min_value=0.0, step=1000.0, value=_pv('h1'), key="val_h1", on_change=sync_val, args=('h1',), help="เงินร่วมทุนวิจัยเพิ่มของลูกค้าเพื่อต่อยอดผลิตภัณฑ์")
-            h2_label = st.selectbox("กิจกรรมส่งมอบหลักของผลงาน (h2) 👉 [กรอกข้อมูล]", options=COEFF_LABELS, index=COEFF_LABELS.index(_pv('h2', COEFF_LABELS[0])), key="val_h2", on_change=sync_val, args=('h2',))
+            h1 = st.number_input("มูลค่าการลงทุนวิจัยต่อยอดโดยตรง (h1) 👉 [กรอกข้อมูล]", min_value=0.0, step=1000.0, key="val_h1", on_change=sync_val, args=('h1',), help="เงินร่วมทุนวิจัยเพิ่มของลูกค้าเพื่อต่อยอดผลิตภัณฑ์")
+            h2_label = st.selectbox("กิจกรรมส่งมอบหลักของผลงาน (h2) 👉 [กรอกข้อมูล]", options=COEFF_LABELS, key="val_h2", on_change=sync_val, args=('h2',))
             h2 = COEFF_OPTIONS[h2_label]
-            h3 = st.number_input("สัดส่วนน้ำหนักการมีส่วนร่วมของ สวทช. (%) (h3) 👉 [กรอกข้อมูล]", min_value=0.0, max_value=100.0, value=_pv('h3', 100.0), key="val_h3", on_change=sync_val, args=('h3',))
+            h3 = st.number_input("สัดส่วนน้ำหนักการมีส่วนร่วมของ สวทช. (%) (h3) 👉 [กรอกข้อมูล]", min_value=0.0, max_value=100.0, key="val_h3", on_change=sync_val, args=('h3',))
             
             # Calculate
             h4 = h1 * h2 * (h3 / 100.0)
@@ -758,14 +803,14 @@ elif st.session_state.active_calc_tab == TABS_LIST[2]:
             st.success(f"🏆 [คำนวณอัตโนมัติ] มูลค่า Pre-Investment หมวด H: **{h4:,.2f} บาท**")
 
     # Section I
-    sec_I = st.checkbox("I. [Investment] ผู้รับบริการมีการลงทุนในกระบวนการผลิตและบริการ (Client Process Investment)", value=_pc('I'), key="chk_I", on_change=sync_chk, args=('I',))
+    sec_I = st.checkbox("I. [Investment] ผู้รับบริการมีการลงทุนในกระบวนการผลิตและบริการ (Client Process Investment)", key="chk_I", on_change=sync_chk, args=('I',))
     if sec_I:
         with st.container(border=True):
             st.markdown("<h4 style='color: #f59e0b;'>หมวด I: ลงทุนเพิ่มเติมในระบบการผลิต</h4>", unsafe_allow_html=True)
-            i1 = st.number_input("มูลค่าจัดซื้อเครื่องจักร/ปรับสายการผลิต (i1) 👉 [กรอกข้อมูล]", min_value=0.0, step=1000.0, value=_pv('i1'), key="val_i1", on_change=sync_val, args=('i1',), help="มูลค่าเครื่องจักรหรือการปรับแต่งโรงงานเพื่อรองรับการใช้งานผลงานวิจัย")
-            i2_label = st.selectbox("กิจกรรมส่งมอบหลักของผลงาน (i2) 👉 [กรอกข้อมูล]", options=COEFF_LABELS, index=COEFF_LABELS.index(_pv('i2', COEFF_LABELS[0])), key="val_i2", on_change=sync_val, args=('i2',))
+            i1 = st.number_input("มูลค่าจัดซื้อเครื่องจักร/ปรับสายการผลิต (i1) 👉 [กรอกข้อมูล]", min_value=0.0, step=1000.0, key="val_i1", on_change=sync_val, args=('i1',), help="มูลค่าเครื่องจักรหรือการปรับแต่งโรงงานเพื่อรองรับการใช้งานผลงานวิจัย")
+            i2_label = st.selectbox("กิจกรรมส่งมอบหลักของผลงาน (i2) 👉 [กรอกข้อมูล]", options=COEFF_LABELS, key="val_i2", on_change=sync_val, args=('i2',))
             i2 = COEFF_OPTIONS[i2_label]
-            i3 = st.number_input("สัดส่วนน้ำหนักการมีส่วนร่วมของ สวทช. (%) (i3) 👉 [กรอกข้อมูล]", min_value=0.0, max_value=100.0, value=_pv('i3', 100.0), key="val_i3", on_change=sync_val, args=('i3',))
+            i3 = st.number_input("สัดส่วนน้ำหนักการมีส่วนร่วมของ สวทช. (%) (i3) 👉 [กรอกข้อมูล]", min_value=0.0, max_value=100.0, key="val_i3", on_change=sync_val, args=('i3',))
             
             # Calculate
             i4 = i1 * i2 * (i3 / 100.0)
@@ -773,15 +818,15 @@ elif st.session_state.active_calc_tab == TABS_LIST[2]:
             st.success(f"🏆 [คำนวณอัตโนมัติ] มูลค่า Pre-Investment หมวด I: **{i4:,.2f} บาท**")
 
     # Section J
-    sec_J = st.checkbox("J. [Investment] ผู้รับบริการมีการจ้างงานเพิ่ม (Additional Staff Hiring)", value=_pc('J'), key="chk_J", on_change=sync_chk, args=('J',))
+    sec_J = st.checkbox("J. [Investment] ผู้รับบริการมีการจ้างงานเพิ่ม (Additional Staff Hiring)", key="chk_J", on_change=sync_chk, args=('J',))
     if sec_J:
         with st.container(border=True):
             st.markdown("<h4 style='color: #f59e0b;'>หมวด J: ร่วมลงทุนจ้างงานบุคลากรใหม่</h4>", unsafe_allow_html=True)
-            j1 = st.number_input("อัตราเงินเดือนค่าจ้างบุคลากรเพิ่มรวมต่อปี (j1) 👉 [กรอกข้อมูล]", min_value=0.0, step=1000.0, value=_pv('j1'), key="val_j1", on_change=sync_val, args=('j1',), help="ยอดรวมเงินเดือนที่ลูกค้าจ่ายเพิ่มขึ้นให้กับพนักงานใหม่ที่เข้ามาคุมงานระบบวิจัย")
-            j2 = st.number_input("สัดส่วนเวลาการปฏิบัติภารกิจเกี่ยวข้องตรง (%) (j2) 👉 [กรอกข้อมูล]", min_value=0.0, max_value=100.0, value=_pv('j2', 100.0), key="val_j2", on_change=sync_val, args=('j2',), help="สัดส่วนเวลา (FTE) ของผู้ว่าจ้างที่เกี่ยวข้องกับการคุมระบบวิจัย")
-            j3_label = st.selectbox("กิจกรรมส่งมอบหลักของผลงาน (j3) 👉 [กรอกข้อมูล]", options=COEFF_LABELS, index=COEFF_LABELS.index(_pv('j3', COEFF_LABELS[0])), key="val_j3", on_change=sync_val, args=('j3',))
+            j1 = st.number_input("อัตราเงินเดือนค่าจ้างบุคลากรเพิ่มรวมต่อปี (j1) 👉 [กรอกข้อมูล]", min_value=0.0, step=1000.0, key="val_j1", on_change=sync_val, args=('j1',), help="ยอดรวมเงินเดือนที่ลูกค้าจ่ายเพิ่มขึ้นให้กับพนักงานใหม่ที่เข้ามาคุมงานระบบวิจัย")
+            j2 = st.number_input("สัดส่วนเวลาการปฏิบัติภารกิจเกี่ยวข้องตรง (%) (j2) 👉 [กรอกข้อมูล]", min_value=0.0, max_value=100.0, key="val_j2", on_change=sync_val, args=('j2',), help="สัดส่วนเวลา (FTE) ของผู้ว่าจ้างที่เกี่ยวข้องกับการคุมระบบวิจัย")
+            j3_label = st.selectbox("กิจกรรมส่งมอบหลักของผลงาน (j3) 👉 [กรอกข้อมูล]", options=COEFF_LABELS, key="val_j3", on_change=sync_val, args=('j3',))
             j3 = COEFF_OPTIONS[j3_label]
-            j4 = st.number_input("สัดส่วนน้ำหนักการมีส่วนร่วมของ สวทช. (%) (j4) 👉 [กรอกข้อมูล]", min_value=0.0, max_value=100.0, value=_pv('j4', 100.0), key="val_j4", on_change=sync_val, args=('j4',))
+            j4 = st.number_input("สัดส่วนน้ำหนักการมีส่วนร่วมของ สวทช. (%) (j4) 👉 [กรอกข้อมูล]", min_value=0.0, max_value=100.0, key="val_j4", on_change=sync_val, args=('j4',))
             
             # Calculate
             j5 = j1 * (j2 / 100.0) * j3 * (j4 / 100.0)
