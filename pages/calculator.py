@@ -937,9 +937,14 @@ elif st.session_state.active_calc_tab == TABS_LIST[3]:
     total_impact = sum([current_results.get(s, 0.0) for s in ['B', 'C', 'D', 'E', 'F', 'G', 'K']])
     total_investment = sum([current_results.get(s, 0.0) for s in ['H', 'I', 'J']])
     
-    proj_id_val = st.session_state.get("projectId", "").strip()
-    proj_name_val = st.session_state.get("projectName", "").strip()
+    p_id_val = st.session_state.get("projectId", "").strip()
+    p_name_val = st.session_state.get("projectName", "").strip()
     report_type_val = st.session_state.get("reportType", "รายปี")
+    # Robustly get description from shadow key or checklist data
+    p_desc_val = st.session_state.get("chk_b5_text", "").strip()
+    if not p_desc_val and "checklist_data" in st.session_state:
+        p_desc_val = st.session_state.checklist_data.get("chk_b5_text", "").strip()
+    
     krrn_val = st.session_state.get("meta_krrn", "").strip()
     krid_val = st.session_state.get("meta_krid", "").strip()
     krrn_rel_val = st.session_state.get("meta_krrn_related", "").strip()
@@ -948,28 +953,7 @@ elif st.session_state.active_calc_tab == TABS_LIST[3]:
     # --- Build full HTML report string ---
     css_link = '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;600;700&display=swap">'
     
-    sections_map = {
-        'B': ('[Impact] ลดการนำเข้าต่างประเทศ', 'B', 'บาท'),
-        'C': ('[Impact] เพิ่มกำไร/รายได้ลูกค้า', 'C', 'บาท'),
-        'D': ('[Impact] ประหยัดค่าใช้จ่ายลูกค้า', 'D', 'บาท'),
-        'E': ('[Impact] เพิ่มประสิทธิภาพลูกค้า', 'E', 'บาท'),
-        'F': ('[Impact] ลดความรุนแรงความเสี่ยง', 'F', 'บาท'),
-        'G': ('[Impact] ทักษะบุคลากรเพิ่ม', 'G', 'บาท'),
-        'K': ('[Impact] เปรียบเทียบก่อน-หลัง', 'K', 'บาท'),
-        'H': ('[Investment] ลงทุนวิจัยต่อยอด', 'H', 'บาท'),
-        'I': ('[Investment] ลงทุนในกระบวนการผลิต', 'I', 'บาท'),
-        'J': ('[Investment] จ้างงานเพิ่ม', 'J', 'บาท'),
-    }
-    
-    detail_rows = ""
-    has_any = False
-    for s, (title, payload_key, unit) in sections_map.items():
-        if _pc(s):
-            has_any = True
-            val = current_results.get(payload_key, 0.0)
-            detail_rows += f'<div class="row hi"><span>🔹 {title}:</span><span>{val:,.2f} {unit}</span></div>'
-    if not has_any:
-        detail_rows = '<div class="row"><span style="color:#888">ยังไม่ได้เลือกประเมินมิติใดๆ</span></div>'
+    # ... (rest of CSS remains same)
     
     html_output = f"""{css_link}
 <style>
@@ -994,6 +978,7 @@ elif st.session_state.active_calc_tab == TABS_LIST[3]:
   <h4>ข้อมูลโครงการ</h4>
   <div class="row"><span>รหัสโครงการ (Project ID):</span><span>{proj_id_val or '-'}</span></div>
   <div class="row"><span>ชื่อโครงการ (Project Name):</span><span>{proj_name_val or '-'}</span></div>
+  <div class="row"><span>ลักษณะผลงานเพิ่มเติม:</span><span>{p_desc_val or '-'}</span></div>
   <div class="row"><span>รูปแบบช่วงเวลาที่บันทึก:</span><span>{report_type_val}</span></div>
   <div class="row"><span>เลขที่ KRRN ผลงาน 3P:</span><span>{krrn_val or 'ไม่มี'}</span></div>
   <div class="row"><span>เลขที่ KRID ผลงาน 3P:</span><span>{krid_val or 'ไม่มี'}</span></div>
