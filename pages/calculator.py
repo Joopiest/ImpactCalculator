@@ -337,36 +337,33 @@ def snapshot_tab(tab_name):
     for w_key, p_key in zip(w_keys, p_keys):
         if w_key in st.session_state:
             val = st.session_state[w_key]
+            # ONLY update if value is not None (Streamlit might send None during switch)
             if val is not None:
                 st.session_state[p_key] = val
 
 def restore_tab(tab_name):
-    """Restores the persistent shadow keys to widget keys for the active tab, and removes other tabs' widget keys."""
-    # 1. Clean up widget keys of all OTHER tabs to prevent Streamlit reset behavior
-    for t in TABS_LIST:
-        if t != tab_name:
-            oth_w_keys, _ = get_tab_keys(t)
-            for owk in oth_w_keys:
-                if owk in st.session_state:
-                    del st.session_state[owk]
-                    
-    # 2. Initialize persistent keys if they don't exist
+    """Restores the persistent shadow keys to widget keys for the active tab."""
     w_keys, p_keys = get_tab_keys(tab_name)
     for w_key, p_key in zip(w_keys, p_keys):
-        if p_key not in st.session_state:
+        if p_key in st.session_state:
+            st.session_state[w_key] = st.session_state[p_key]
+        else:
+            # Default initialization
             if p_key.startswith("_p_chk_"):
                 st.session_state[p_key] = False
+                st.session_state[w_key] = False
             elif p_key.startswith("_p_val_"):
                 fid = p_key.replace("_p_val_", "")
-                st.session_state[p_key] = FIELD_DEFAULTS.get(fid, 0.0)
-            else: # Details page keys
-                field = p_key
-                if field == "reportType":
-                    st.session_state[field] = "รายปี"
+                def_val = FIELD_DEFAULTS.get(fid, 0.0)
+                st.session_state[p_key] = def_val
+                st.session_state[w_key] = def_val
+            else: # Tab 1
+                if p_key == "reportType":
+                    st.session_state[p_key] = "รายปี"
+                    st.session_state[w_key] = "รายปี"
                 else:
-                    st.session_state[field] = ""
-        # We NO LONGER set st.session_state[w_key] here to avoid Streamlit warnings and overwrites.
-        # The widgets now use value= or index= parameters directly.
+                    st.session_state[p_key] = ""
+                    st.session_state[w_key] = ""
 
 def snapshot_state():
     """Manual fallback to save active tab's states and trigger autosave."""
@@ -376,44 +373,6 @@ def snapshot_state():
 def deep_sync_all():
     """Sync active tab only."""
     snapshot_tab(st.session_state.active_calc_tab)
-
-def cloud_load_on_startup():
-    """Load draft from Firestore into shadow keys on page startup.
-    This ensures that even after a page refresh, data is restored from cloud.
-    Only runs once per project load (uses _cloud_loaded flag)."""
-    if not firebase_config.is_db_connected():
-        return
-    proj_id = st.session_state.get("projectId", "").strip()
-    emp_id = st.session_state.get("employee_id", "").strip()
-    if not proj_id or not emp_id:
-        return
-    # Only load once per project
-    cache_flag = f"_cloud_loaded_{proj_id}"
-    if st.session_state.get(cache_flag):
-        return
-    try:
-        drafts = firebase_config.load_drafts(emp_id)
-        for d in drafts:
-            if d.get("project_id", "").strip() == proj_id:
-                # Populate shadow keys from Firestore
-                sections = d.get("sections", {})
-                for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
-                    st.session_state[f"_p_chk_{s}"] = sections.get(s, False)
-                fields = d.get("fields", {})
-                for k, v in FIELD_DEFAULTS.items():
-                    st.session_state[f"_p_val_{k}"] = fields.get(k, v)
-                # Also restore metadata
-                st.session_state.projectName = d.get("project_name", st.session_state.get("projectName", ""))
-                st.session_state.reportType = d.get("report_type", st.session_state.get("reportType", "รายปี"))
-                st.session_state.meta_krrn = d.get("meta_krrn", st.session_state.get("meta_krrn", ""))
-                st.session_state.meta_krid = d.get("meta_krid", st.session_state.get("meta_krid", ""))
-                st.session_state.meta_krrn_related = d.get("meta_krrn_related", st.session_state.get("meta_krrn_related", ""))
-                st.session_state.meta_patent_id = d.get("meta_patent_id", st.session_state.get("meta_patent_id", ""))
-                st.session_state[cache_flag] = True
-                break
-    except Exception as e:
-        print(f"cloud_load_on_startup error: {e}")
-
 
 # 4. Core Lifecycle Initialization & Early Tab Transition Check
 if "checklist_passed" not in st.session_state:
@@ -426,17 +385,12 @@ if "last_active_tab" not in st.session_state:
     st.session_state.last_active_tab = TABS_LIST[0]
 
 # Initialize persistent details keys if not present
-if "projectId" not in st.session_state:
-    st.session_state.projectId = ""
-if "projectName" not in st.session_state:
-    st.session_state.projectName = ""
-if "reportType" not in st.session_state:
-    st.session_state.reportType = "รายปี"
-for meta in ["meta_krrn", "meta_krid", "meta_krrn_related", "meta_patent_id"]:
-    if meta not in st.session_state:
-        st.session_state[meta] = ""
+main_persistent = ["projectId", "projectName", "reportType", "meta_krrn", "meta_krid", "meta_krrn_related", "meta_patent_id"]
+for field in main_persistent:
+    if field not in st.session_state:
+        st.session_state[field] = "รายปี" if field == "reportType" else ""
 
-# Load data from Firestore on startup (populates shadow keys if draft exists)
+# Load data from Firestore on startup
 cloud_load_on_startup()
 
 # Early Tab Transition Logic
@@ -451,22 +405,18 @@ elif st.session_state.active_calc_tab != old_tab:
     target_tab = st.session_state.active_calc_tab
 
 if detected_change:
-    # Callbacks already saved widget values to shadow keys + Firestore,
-    # so we just need to snapshot any remaining unsaved widget state.
-    # snapshot_tab(old_tab)  # Disabled to prevent overwriting persistent keys with stale widget keys
-    # Extra safety: ensure cloud is up to date
+    # Save the OLD tab's widgets before they disappear
+    snapshot_tab(old_tab)
     autosave_to_cloud()
     
-    # Update all active tab markers
     st.session_state.active_calc_tab = target_tab
     st.session_state.segmented_calc_tab = target_tab
     st.session_state.last_active_tab = target_tab
     
-    # Restore the new tab's inputs from shadow keys (backed by Firestore)
+    # Restore the NEW tab's widgets from shadow keys
     restore_tab(target_tab)
 else:
-    # Regular rerun within the same tab:
-    # Restore tab's widget keys from shadow keys (Firestore-backed)
+    # Rerun on same tab: keep widget keys in sync with shadow keys
     restore_tab(st.session_state.active_calc_tab)
 
 def _pv(key, default=0.0):
