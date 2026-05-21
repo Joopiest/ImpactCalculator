@@ -202,6 +202,32 @@ def snapshot_state():
     # Extra safety: Always save to cloud when a snapshot is taken (e.g. on Next or Tab switch)
     autosave_to_cloud()
 
+def deep_sync_all():
+    """Foolproof synchronization of all possible inputs to persistent state on every rerun."""
+    # 1. Sync Tab 1 Metadata
+    meta_fields = ["projectId", "projectName", "reportType", "meta_krrn", "meta_krid", "meta_krrn_related", "meta_patent_id"]
+    for field in meta_fields:
+        w_key = f"wid_{field}"
+        if w_key in st.session_state:
+            # ONLY update if the widget actually has content (don't overwrite with empty)
+            new_val = st.session_state[w_key]
+            if new_val is not None:
+                st.session_state[field] = new_val
+
+    # 2. Sync Numbers & Checkboxes (Persistent Shadow Keys)
+    for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
+        w_chk = f"chk_{s}"
+        p_chk = f"_p_chk_{s}"
+        if w_chk in st.session_state:
+            st.session_state[p_chk] = st.session_state[w_chk]
+            
+    for k in FIELD_DEFAULTS:
+        w_val = f"val_{k}"
+        p_val = f"_p_val_{k}"
+        if w_val in st.session_state:
+            st.session_state[p_val] = st.session_state[w_val]
+
+
 init_states()
 deep_sync_all() # Ensure widget data is mirrored to persistent state on every rerun
 
@@ -232,31 +258,6 @@ def _gm(field):
         if "checklist_data" in st.session_state:
             val = st.session_state.checklist_data.get(field)
     return str(val).strip() if val is not None else ""
-
-def deep_sync_all():
-    """Foolproof synchronization of all possible inputs to persistent state on every rerun."""
-    # 1. Sync Tab 1 Metadata
-    meta_fields = ["projectId", "projectName", "reportType", "meta_krrn", "meta_krid", "meta_krrn_related", "meta_patent_id"]
-    for field in meta_fields:
-        w_key = f"wid_{field}"
-        if w_key in st.session_state:
-            # ONLY update if the widget actually has content (don't overwrite with empty)
-            new_val = st.session_state[w_key]
-            if new_val is not None:
-                st.session_state[field] = new_val
-
-    # 2. Sync Numbers & Checkboxes (Persistent Shadow Keys)
-    for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
-        w_chk = f"chk_{s}"
-        p_chk = f"_p_chk_{s}"
-        if w_chk in st.session_state:
-            st.session_state[p_chk] = st.session_state[w_chk]
-            
-    for k in FIELD_DEFAULTS:
-        w_val = f"val_{k}"
-        p_val = f"_p_val_{k}"
-        if w_val in st.session_state:
-            st.session_state[p_val] = st.session_state[w_val]
 
 def compute_results():
 
