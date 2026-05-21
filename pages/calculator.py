@@ -321,6 +321,44 @@ def deep_sync_all():
     """Sync active tab only."""
     snapshot_tab(st.session_state.active_calc_tab)
 
+
+def cloud_load_on_startup(force=False):
+    """Load draft from Firestore into shadow keys on page startup.
+    This ensures that even after a page refresh, data is restored from cloud.
+    Only runs once per project load (uses _cloud_loaded flag) unless force=True."""
+    if not firebase_config.is_db_connected():
+        return
+    proj_id = st.session_state.get("projectId", "").strip()
+    emp_id = st.session_state.get("employee_id", "").strip()
+    if not proj_id or not emp_id:
+        return
+    # Only load once per project
+    cache_flag = f"_cloud_loaded_{proj_id}"
+    if st.session_state.get(cache_flag) and not force:
+        return
+    try:
+        drafts = firebase_config.load_drafts(emp_id)
+        for d in drafts:
+            if d.get("project_id", "").strip() == proj_id:
+                # Populate shadow keys from Firestore
+                sections = d.get("sections", {})
+                for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
+                    st.session_state[f"_p_chk_{s}"] = sections.get(s, False)
+                fields = d.get("fields", {})
+                for k, v in FIELD_DEFAULTS.items():
+                    st.session_state[f"_p_val_{k}"] = fields.get(k, v)
+                # Also restore metadata
+                st.session_state.projectName = d.get("project_name", st.session_state.get("projectName", ""))
+                st.session_state.reportType = d.get("report_type", st.session_state.get("reportType", "รายปี"))
+                st.session_state.meta_krrn = d.get("meta_krrn", st.session_state.get("meta_krrn", ""))
+                st.session_state.meta_krid = d.get("meta_krid", st.session_state.get("meta_krid", ""))
+                st.session_state.meta_krrn_related = d.get("meta_krrn_related", st.session_state.get("meta_krrn_related", ""))
+                st.session_state.meta_patent_id = d.get("meta_patent_id", st.session_state.get("meta_patent_id", ""))
+                st.session_state[cache_flag] = True
+                break
+    except Exception as e:
+        print(f"cloud_load_on_startup error: {e}")
+
 # 4. Core Lifecycle Initialization & Early Tab Transition Check
 if "checklist_passed" not in st.session_state:
     st.session_state.checklist_passed = False
