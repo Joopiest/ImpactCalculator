@@ -192,11 +192,23 @@ else:
     
     # Render Logout Button at bottom of sidebar
     if st.sidebar.button("ออกจากระบบ (Log Out)", use_container_width=True, type="secondary"):
-        st.session_state.authenticated = False
-        st.session_state.employee_id = ""
-        st.session_state.organization = ""
-        st.session_state.checklist_passed = False
-        st.session_state.checklist_data = {}
+        # Clear all user and project data
+        keys_to_clear = [
+            "authenticated", "employee_id", "organization", 
+            "checklist_passed", "checklist_data",
+            "projectId", "projectName", "reportType",
+            "meta_krrn", "meta_krid", "meta_krrn_related", "meta_patent_id",
+            "active_calc_tab", "segmented_calc_tab", "last_active_tab"
+        ]
+        # Also clear all widget and persistent keys
+        for k in list(st.session_state.keys()):
+            if k.startswith(("wid_", "val_", "chk_", "_p_")):
+                keys_to_clear.append(k)
+        
+        for k in keys_to_clear:
+            if k in st.session_state:
+                del st.session_state[k]
+                
         st.rerun()
         
     pg.run()

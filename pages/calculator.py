@@ -705,8 +705,13 @@ elif st.session_state.active_calc_tab == TABS_LIST[3]:
     total_impact = sum([current_results.get(s, 0.0) for s in ['B', 'C', 'D', 'E', 'F', 'G', 'K']])
     total_investment = sum([current_results.get(s, 0.0) for s in ['H', 'I', 'J']])
     
-    proj_id = st.session_state.projectId.strip()
-    proj_name = st.session_state.projectName.strip()
+    proj_id_val = st.session_state.get("projectId", "").strip()
+    proj_name_val = st.session_state.get("projectName", "").strip()
+    report_type_val = st.session_state.get("reportType", "รายปี")
+    krrn_val = st.session_state.get("meta_krrn", "").strip()
+    krid_val = st.session_state.get("meta_krid", "").strip()
+    krrn_rel_val = st.session_state.get("meta_krrn_related", "").strip()
+    patent_val = st.session_state.get("meta_patent_id", "").strip()
     
     # --- Build full HTML report string ---
     css_link = '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;600;700&display=swap">'
@@ -755,13 +760,13 @@ elif st.session_state.active_calc_tab == TABS_LIST[3]:
   <div class="meta">ผู้ประเมิน: {st.session_state.employee_id} ({st.session_state.organization})</div>
   <hr>
   <h4>ข้อมูลโครงการ</h4>
-  <div class="row"><span>รหัสโครงการ (Project ID):</span><span>{proj_id or '-'}</span></div>
-  <div class="row"><span>ชื่อโครงการ (Project Name):</span><span>{proj_name or '-'}</span></div>
-  <div class="row"><span>รูปแบบช่วงเวลาที่บันทึก:</span><span>{st.session_state.reportType}</span></div>
-  <div class="row"><span>เลขที่ KRRN ผลงาน 3P:</span><span>{st.session_state.meta_krrn or 'ไม่มี'}</span></div>
-  <div class="row"><span>เลขที่ KRID ผลงาน 3P:</span><span>{st.session_state.meta_krid or 'ไม่มี'}</span></div>
-  <div class="row"><span>เลขที่ KRRN ที่เกี่ยวข้อง:</span><span>{st.session_state.meta_krrn_related or 'ไม่มี'}</span></div>
-  <div class="row"><span>เลขที่สิทธิบัตร/อนุสิทธิบัตร:</span><span>{st.session_state.meta_patent_id or 'ไม่มี'}</span></div>
+  <div class="row"><span>รหัสโครงการ (Project ID):</span><span>{proj_id_val or '-'}</span></div>
+  <div class="row"><span>ชื่อโครงการ (Project Name):</span><span>{proj_name_val or '-'}</span></div>
+  <div class="row"><span>รูปแบบช่วงเวลาที่บันทึก:</span><span>{report_type_val}</span></div>
+  <div class="row"><span>เลขที่ KRRN ผลงาน 3P:</span><span>{krrn_val or 'ไม่มี'}</span></div>
+  <div class="row"><span>เลขที่ KRID ผลงาน 3P:</span><span>{krid_val or 'ไม่มี'}</span></div>
+  <div class="row"><span>เลขที่ KRRN ที่เกี่ยวข้อง:</span><span>{krrn_rel_val or 'ไม่มี'}</span></div>
+  <div class="row"><span>เลขที่สิทธิบัตร/อนุสิทธิบัตร:</span><span>{patent_val or 'ไม่มี'}</span></div>
   <hr>
   <h4>รายละเอียดมูลค่าประเมินแยกรายหมวด</h4>
   {detail_rows}
