@@ -547,12 +547,10 @@ elif st.session_state.active_calc_tab == TABS_LIST[1]:
     if sec_K:
         with st.container(border=True):
             st.markdown("<h4 style='color: #3b82f6;'>หมวด K: [Impact] อื่น ๆ เปรียบเทียบสิ่งที่เกิดขึ้นก่อน-หลังใช้ผลงานวิจัย</h4>", unsafe_allow_html=True)
-            k1 = st.number_input("มูลค่า...(ระบุ)... (k1) 👉 [กรอกข้อมูล]", min_value=0.0, step=1000.0, value=_pv('k1'), key="val_k1", on_change=sync_val, args=('k1',), help="ระบุมูลค่าส่วนต่างที่ได้ทำการประเมินเพิ่มเติม เช่น มูลค่าเปรียบเทียบก่อน-หลังใช้ผลงานวิจัย")
+            k1 = st.number_input("มูลค่า...(ระบุ)... (k1) 👉 [กรอกข้อมูล]", min_value=0.0, step=1000.0, value=_pv('k1'), key="val_k1", on_change=sync_val, args=('k1',), help="ระบุมูลค่าส่วนต่างที่ได้ทำการประเมินเพิ่มเติม")
             k2_label = st.selectbox("กิจกรรมส่งมอบหลักของผลงาน (k2) 👉 [กรอกข้อมูล]", options=COEFF_LABELS, index=COEFF_LABELS.index(_pv('k2', COEFF_LABELS[0])), key="val_k2", on_change=sync_val, args=('k2',))
             k2 = COEFF_OPTIONS[k2_label]
             k3 = st.number_input("Contribution (จากผู้รับบริการ) (%) (k3) 👉 [กรอกข้อมูล]", min_value=0.0, max_value=100.0, value=_pv('k3', 100.0), key="val_k3", on_change=sync_val, args=('k3',))
-            
-            # Calculate
             k4 = k1 * k2 * (k3 / 100.0)
             results["K"] = k4
             st.success(f"🏆 [คำนวณอัตโนมัติ] มูลค่า Pre-Impact หมวด K: **{k4:,.2f} บาท**")
