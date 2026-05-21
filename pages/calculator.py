@@ -85,6 +85,48 @@ def sync_project_meta():
         w_key = f"wid_{field}"
         if w_key in st.session_state:
             st.session_state[field] = st.session_state[w_key]
+    # Trigger autosave to cloud for extra safety as requested by user
+    autosave_to_cloud()
+
+def get_current_state_payload():
+    """Captures all current widget and persistent states into a single draft payload."""
+    sections = {s: _pc(s) for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']}
+    fields = {}
+    for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
+        if s == 'B': f_ids = ['b1', 'b2', 'b4', 'b5', 'b6', 'b7']
+        elif s == 'C': f_ids = ['c1', 'c2', 'c3', 'c4', 'c6', 'c7']
+        elif s == 'D': f_ids = ['d1', 'd2', 'd4', 'd5']
+        elif s == 'E': f_ids = ['e1', 'e2', 'e6', 'e7', 'e9', 'e10', 'e11']
+        elif s == 'F': f_ids = ['f1', 'f2', 'f3', 'f4', 'f5']
+        elif s == 'G': f_ids = ['g1', 'g2', 'g3', 'g4']
+        elif s == 'H': f_ids = ['h1', 'h2', 'h3']
+        elif s == 'I': f_ids = ['i1', 'i2', 'i3']
+        elif s == 'J': f_ids = ['j1', 'j2', 'j3', 'j4']
+        elif s == 'K': f_ids = ['k1', 'k2', 'k3']
+        for fid in f_ids:
+            fields[fid] = _pv(fid, FIELD_DEFAULTS.get(fid, 0.0))
+    
+    return {
+        "project_name": st.session_state.get("projectName", ""),
+        "organization": st.session_state.get("organization", ""),
+        "report_type": st.session_state.get("reportType", "รายปี"),
+        "meta_krrn": st.session_state.get("meta_krrn", ""),
+        "meta_krid": st.session_state.get("meta_krid", ""),
+        "meta_krrn_related": st.session_state.get("meta_krrn_related", ""),
+        "meta_patent_id": st.session_state.get("meta_patent_id", ""),
+        "sections": sections,
+        "fields": fields
+    }
+
+def autosave_to_cloud():
+    """Silently saves current state to Firestore if projectId is present."""
+    if firebase_config.is_db_connected():
+        proj_id = st.session_state.get("projectId", "").strip()
+        emp_id = st.session_state.get("employee_id", "").strip()
+        if proj_id and emp_id:
+            payload = get_current_state_payload()
+            # Background save to avoid UI lag (Firestore SDK is async-friendly but we use sync here for simplicity)
+            firebase_config.save_draft(emp_id, proj_id, payload)
 
 def init_states():
     # Debug logging
@@ -151,12 +193,14 @@ def init_states():
             st.session_state[w_key] = st.session_state[p_key]
 
 def snapshot_state():
-    """Manual trigger to save all current widget values to persistent shadow keys."""
+    """Manual trigger to save all current widget values to persistent shadow keys and cloud."""
     sync_project_meta()
     for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
         sync_chk(s)
     for k in FIELD_DEFAULTS:
         sync_val(k)
+    # Extra safety: Always save to cloud when a snapshot is taken (e.g. on Next or Tab switch)
+    autosave_to_cloud()
 
 init_states()
 
@@ -318,8 +362,8 @@ if not st.session_state.checklist_passed:
 # 5. Form Fields & Interactive Logic Containers
 # Synchronize state based on user interaction source (widget vs button)
 if "segmented_calc_tab" in st.session_state and st.session_state.segmented_calc_tab != st.session_state.last_active_tab:
-    # Widget was clicked - force sync before switching
-    sync_project_meta()
+    # Widget was clicked - force full snapshot & cloud save before switching
+    snapshot_state()
     st.session_state.active_calc_tab = st.session_state.segmented_calc_tab
     st.session_state.last_active_tab = st.session_state.segmented_calc_tab
 elif st.session_state.active_calc_tab != st.session_state.last_active_tab:
@@ -584,9 +628,11 @@ elif st.session_state.active_calc_tab == TABS_LIST[1]:
     st.markdown("---")
     col_nav1, col_nav2 = st.columns(2)
     if col_nav1.button("⬅️ ย้อนกลับ (Back)", key="btn_back_tab2", use_container_width=True):
+        snapshot_state()
         st.session_state.active_calc_tab = TABS_LIST[0]
         st.rerun()
     if col_nav2.button("ขั้นตอนถัดไป (Next) ➡️", key="btn_next_tab2", use_container_width=True, type="primary"):
+        snapshot_state()
         st.session_state.active_calc_tab = TABS_LIST[2]
         st.rerun()
 
@@ -643,9 +689,11 @@ elif st.session_state.active_calc_tab == TABS_LIST[2]:
     st.markdown("---")
     col_nav1, col_nav2 = st.columns(2)
     if col_nav1.button("⬅️ ย้อนกลับ (Back)", key="btn_back_tab3", use_container_width=True):
+        snapshot_state()
         st.session_state.active_calc_tab = TABS_LIST[1]
         st.rerun()
     if col_nav2.button("ขั้นตอนถัดไป (Next) ➡️", key="btn_next_tab3", use_container_width=True, type="primary"):
+        snapshot_state()
         st.session_state.active_calc_tab = TABS_LIST[3]
         st.rerun()
 
@@ -736,9 +784,11 @@ elif st.session_state.active_calc_tab == TABS_LIST[3]:
     st.markdown("---")
     col_nav1, col_nav2 = st.columns(2)
     if col_nav1.button("⬅️ ย้อนกลับ (Back)", key="btn_back_tab4_new", use_container_width=True):
+        snapshot_state()
         st.session_state.active_calc_tab = TABS_LIST[2]
         st.rerun()
     if col_nav2.button("ขั้นตอนถัดไป (Next) ➡️", key="btn_next_tab4_new", use_container_width=True, type="primary"):
+        snapshot_state()
         st.session_state.active_calc_tab = TABS_LIST[4]
         st.rerun()
 
