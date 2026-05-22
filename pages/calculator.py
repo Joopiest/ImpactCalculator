@@ -400,7 +400,7 @@ def _gm(field):
             val = st.session_state.checklist_data.get(field)
     return str(val).strip() if val is not None else ""
 
-def autosave_to_cloud(silent=True):
+def autosave_to_cloud(silent=False):
     """Saves current state to Firestore synchronously."""
     if firebase_config.is_db_connected():
         proj_id = st.session_state.get("projectId", "").strip()
