@@ -30,7 +30,8 @@
 |---|---------|-------------|
 | 📋 | **Readiness Checklist** | 2-section validation (Basic Criteria + Project Characteristics) before calculation |
 | 🧮 | **10-Category Calculator** | 7 Impact categories (B-G, K) + 3 Investment categories (H-J) with precise formulas |
-| ☁️ | **Cloud Draft Management** | Save, load, and delete work-in-progress drafts on Firebase Firestore |
+| ☁️ | **Real-time Cloud Sync** | Auto-save, load, and delete drafts on Firebase Firestore instantly |
+| ⚡ | **Smart State Management** | JavaScript click-traps for browser autofill and shadow keys to prevent data loss |
 | 📊 | **Interactive Dashboard** | Plotly-powered analytics with pie charts, bar charts, timeline, and searchable tables |
 | 🔐 | **Organization Login** | Session-based auth supporting NSTDA, NECTEC, BIOTEC, MTEC, NANOTEC, ENTEC, Guest |
 | 🌙 | **Premium Dark Theme** | Space-themed UI with glassmorphism effects and smooth animations |

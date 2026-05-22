@@ -47,9 +47,10 @@ The **Impact & Investment Evaluation System** is a web-based application develop
 | **Database** | Firebase Firestore (NoSQL) |
 | **Visualization** | Plotly (interactive charts) |
 | **Authentication** | Session-based (Organization + Employee ID) |
+| **State Sync** | Real-time Autosave + JS Autofill Click-Trap |
 | **Theme** | Premium dark space with glassmorphism |
 | **Languages** | Thai (primary) + English (technical terms) |
-| **Calculator Size** | 882 lines (calculator.py) |
+| **Calculator Size** | ~850 lines (calculator.py) |
 
 ---
 
@@ -422,9 +423,22 @@ st.session_state[shadow_key] = value
 
 ### Limitations
 
-- ❌ Values are lost on full page refresh (F5)
-- ❌ Values are lost when the session expires
+- ❌ Values are lost on full page refresh (F5) unless loaded from Cloud
 - ❌ Increases memory usage (2× keys per field)
+
+### 7.1 Real-time Cloud Autosave
+
+The `on_change` callback pattern has been extended to perform **Real-time Autosave** to Firebase Firestore. Every time a user changes a field and clicks away, the shadow key is updated, and the `autosave_to_cloud()` function fires asynchronously to sync the current state to the cloud.
+
+### 7.2 Browser Autofill Workaround (JavaScript Click Trap)
+
+A known limitation in Streamlit is its inability to detect values injected by browser Autofill systems (e.g., Chrome Autofill, password managers) if the user does not press Enter or click outside the field before navigating away (such as clicking a Tab).
+
+To solve this, the application injects a custom JavaScript payload (`components.html(js_code)`) at the top of the calculator. This script:
+1. Listens for `mousedown` events on the entire document.
+2. Identifies if the target is a UI navigation element (like tabs, buttons, or labels).
+3. Finds the currently active input element (`document.activeElement`).
+4. Manually dispatches a `blur()` event and a synthetic `change` event to force Streamlit's React frontend to register the autofilled value before the navigation event processes.
 
 ---
 
