@@ -70,7 +70,7 @@ components.html(
             window.parent._autofillInterval = window.parent.setInterval(() => syncStreamlitInputs(false, true), 300);
             
             window.parent.document.addEventListener('click', (e) => {
-                const target = e.target.closest('button, [role="button"], [role="option"], [role="tab"]');
+                const target = e.target.closest('button, [role="button"], [role="option"], [role="tab"], [data-testid="stSegmentedControlItem"], label');
                 if (target) {
                     const btnText = target.textContent || '';
                     const isNavBtn = btnText.includes('Next') || 
@@ -88,6 +88,7 @@ components.html(
                                       btnText.includes('Drafts') || 
                                       btnText.includes('โหลด') || 
                                       btnText.includes('Load') ||
+                                      btnText.includes('ข้อมูลโครงการ') ||
                                       btnText.includes('ส่งรายงาน');
                     if (isNavBtn && !target.hasAttribute('data-sync-delayed')) {
                         e.preventDefault();
@@ -107,7 +108,7 @@ components.html(
             }, true);
             
             window.parent.document.addEventListener('mouseover', (e) => {
-                const target = e.target.closest('button, [role="button"], [role="option"], [role="tab"]');
+                const target = e.target.closest('button, [role="button"], [role="option"], [role="tab"], [data-testid="stSegmentedControlItem"], label');
                 if (target) {
                     syncStreamlitInputs(false, true);
                 }
