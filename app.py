@@ -36,6 +36,9 @@ load_css()
 
 # 4. Auth Gate
 if not st.session_state.authenticated:
+    # Hide sidebar completely on login page
+    st.markdown("<style>[data-testid='stSidebar'] { display: none; }</style>", unsafe_allow_html=True)
+    
     # Beautiful auth screen
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
