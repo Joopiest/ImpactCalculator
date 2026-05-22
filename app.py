@@ -259,8 +259,6 @@ else:
                 
         st.rerun()
 
-    # Debug Panel
-    if st.sidebar.checkbox("🛠️ โหมด Debug (สำหรับผู้ดูแลระบบ)"):
         st.sidebar.write("### Session State Dump:")
         debug_dict = {k: v for k, v in st.session_state.items() if k.startswith("_p_") or k.startswith("val_") or k in ["projectId", "active_calc_tab"]}
         st.sidebar.json(debug_dict)

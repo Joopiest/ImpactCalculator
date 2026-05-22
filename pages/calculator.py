@@ -687,11 +687,6 @@ elif st.session_state.active_calc_tab == TABS_LIST[1]:
         
     st.markdown("### 📈 ประเมินมูลค่าผลกระทบทางเศรษฐกิจ/สังคม (Pre-Impact)")
     
-    # Debug Panel at top of Tab 2
-    if st.checkbox("🛠️ โหมด Debug (สำหรับผู้ดูแลระบบ)"):
-        st.write("### Session State Dump:")
-        debug_dict = {k: v for k, v in st.session_state.items() if k.startswith("_p_") or k.startswith("val_") or k in ["projectId", "active_calc_tab"]}
-        st.json(debug_dict)
     st.info("""
     💡 **กฎความซ้ำซ้อน (Exclusivity Rule):**
     หากเลือก **หมวด B (ลดการนำเข้า)** ระบบจะปิดการใช้งานหมวด C, D, E, F, G โดยอัตโนมัติ เพื่อป้องกันการประเมินมูลค่าทับซ้อนกันในโครงการเดียวกัน
