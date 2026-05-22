@@ -1,4 +1,21 @@
 import streamlit as st
+import firebase_config
+
+# Fallback initialization in case user navigates here directly, bypassing app.py
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+if "checklist_passed" not in st.session_state:
+    st.session_state.checklist_passed = False
+if "checklist_data" not in st.session_state:
+    st.session_state.checklist_data = {}
+if "employee_id" not in st.session_state:
+    st.session_state.employee_id = ""
+if "organization" not in st.session_state:
+    st.session_state.organization = ""
+    
+if not st.session_state.authenticated:
+    st.warning("⚠️ กรุณาเข้าสู่ระบบผ่านหน้าหลักก่อนเข้าใช้งาน")
+    st.stop()
 
 st.markdown("""
 <div class="section-header">

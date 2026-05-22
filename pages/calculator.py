@@ -12,6 +12,22 @@ for _k, _v in list(st.session_state.items()):
     if _k.startswith("val_") or _k.startswith("chk_"):
         st.session_state[f"_p_{_k}"] = _v
 
+# Fallback initialization in case user navigates here directly, bypassing app.py
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+if "checklist_passed" not in st.session_state:
+    st.session_state.checklist_passed = False
+if "checklist_data" not in st.session_state:
+    st.session_state.checklist_data = {}
+if "employee_id" not in st.session_state:
+    st.session_state.employee_id = ""
+if "organization" not in st.session_state:
+    st.session_state.organization = ""
+    
+if not st.session_state.authenticated:
+    st.warning("⚠️ กรุณาเข้าสู่ระบบผ่านหน้าหลักก่อนเข้าใช้งาน")
+    st.stop()
+
 # Inject background JavaScript to automatically detect browser autofill on input fields
 # and dispatch synthetic events so Streamlit's React frontend registers the values.
 components.html(
