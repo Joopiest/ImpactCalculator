@@ -251,15 +251,18 @@ else:
             "meta_krrn", "meta_krid", "meta_krrn_related", "meta_patent_id",
             "active_calc_tab", "segmented_calc_tab", "last_active_tab"
         ]
-        # Also clear all widget and persistent keys
-        for k in list(st.session_state.keys()):
-            if k.startswith(("wid_", "val_", "chk_", "_p_")):
-                keys_to_clear.append(k)
-        
-        for k in keys_to_clear:
-            if k in st.session_state:
-                del st.session_state[k]
+        # Clear all persistent shadow keys
+        keys_to_clear.extend([k for k in st.session_state.keys() if k.startswith("_p_") or k.startswith("val_") or k.startswith("chk_") or k.startswith("wid_")])
+        for key in keys_to_clear:
+            if key in st.session_state:
+                del st.session_state[key]
                 
         st.rerun()
+
+    # Debug Panel
+    if st.sidebar.checkbox("🛠️ โหมด Debug (สำหรับผู้ดูแลระบบ)"):
+        st.sidebar.write("### Session State Dump:")
+        debug_dict = {k: v for k, v in st.session_state.items() if k.startswith("_p_") or k.startswith("val_") or k in ["projectId", "active_calc_tab"]}
+        st.sidebar.json(debug_dict)
         
     pg.run()
