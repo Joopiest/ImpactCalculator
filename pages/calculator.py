@@ -1107,8 +1107,7 @@ elif st.session_state.active_calc_tab == TABS_LIST[4]:
                     "fields": fields
                 }
                 if firebase_config.save_draft(st.session_state.employee_id, proj_id, draft_payload):
-                    st.toast("💾 บันทึกแบบร่างขึ้นระบบคลาวด์เรียบร้อยแล้ว!")
-                    st.rerun()
+                    st.success(f"✅ บันทึกแบบร่างของโครงการ **{proj_id}** ขึ้นระบบคลาวด์เรียบร้อยแล้ว!")
     else:
         st.info("❌ ฟังก์ชัน Cloud Drafts ทำงานได้ในโหมดออนไลน์เท่านั้น (ปัจจุบันไม่สามารถเชื่อมต่อ Firebase ได้)")
 
