@@ -293,20 +293,6 @@ def get_tab_keys(tab_name):
         return w_keys, p_keys
     return [], []
 
-def snapshot_tab(tab_name):
-    """(Deprecated) Relies entirely on on_change callbacks now to avoid race conditions."""
-    pass
-
-
-def snapshot_state():
-    """Manual fallback to save active tab's states and trigger autosave."""
-    snapshot_tab(st.session_state.active_calc_tab)
-    autosave_to_cloud()
-
-def deep_sync_all():
-    """Sync active tab only."""
-    snapshot_tab(st.session_state.active_calc_tab)
-
 
 def cloud_load_on_startup(force=False):
     """Load draft from Firestore into shadow keys on page startup.
@@ -527,9 +513,6 @@ elif st.session_state.active_calc_tab != old_tab:
     target_tab = st.session_state.active_calc_tab
 
 if detected_change:
-    # IMPORTANT: Save the OLD tab's widgets before they disappear from session state
-    snapshot_tab(old_tab)
-    
     # Update all active tab markers
     st.session_state.active_calc_tab = target_tab
     st.session_state.segmented_calc_tab = target_tab
@@ -598,6 +581,7 @@ results = compute_results()
 # ==================== TAB 1: PROJECT DETAILS ====================
 if st.session_state.active_calc_tab == TABS_LIST[0]:
     st.markdown("### 📋 กรอกข้อมูลรายละเอียดโครงการ")
+    force_restore_tab_state(TABS_LIST[0])
     st.text_input(
         "รหัสโครงการ (Project ID) 👉 [กรอกข้อมูล]",
         

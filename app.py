@@ -258,9 +258,5 @@ else:
                 del st.session_state[key]
                 
         st.rerun()
-
-        st.sidebar.write("### Session State Dump:")
-        debug_dict = {k: v for k, v in st.session_state.items() if k.startswith("_p_") or k.startswith("val_") or k in ["projectId", "active_calc_tab"]}
-        st.sidebar.json(debug_dict)
         
     pg.run()
