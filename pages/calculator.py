@@ -581,7 +581,6 @@ results = compute_results()
 # ==================== TAB 1: PROJECT DETAILS ====================
 if st.session_state.active_calc_tab == TABS_LIST[0]:
     st.markdown("### 📋 กรอกข้อมูลรายละเอียดโครงการ")
-    force_restore_tab_state(TABS_LIST[0])
     st.text_input(
         "รหัสโครงการ (Project ID) 👉 [กรอกข้อมูล]",
         
