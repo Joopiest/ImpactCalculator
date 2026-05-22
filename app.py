@@ -218,6 +218,7 @@ else:
                     
                     # Set cloud loaded flag so calculator's cloud_load_on_startup doesn't overwrite
                     st.session_state[f"_cloud_loaded_{proj_id}"] = True
+                    st.session_state["last_loaded_projectId"] = proj_id
                     
                     st.sidebar.success(f"✅ โหลดข้อมูลสำเร็จ!")
                     st.switch_page("pages/calculator.py")

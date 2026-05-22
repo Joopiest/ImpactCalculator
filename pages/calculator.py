@@ -4,6 +4,14 @@ import requests
 import firebase_config
 from datetime import datetime
 
+# EARLY STATE BACKUP: Prevent Streamlit data loss from unmounted widgets!
+# Streamlit deletes unmounted widgets at the end of a rerun.
+# If a widget update (like a blur event) arrives in a rerun where the widget isn't rendered
+# (e.g., during a tab switch), we MUST capture it before Streamlit deletes it!
+for _k, _v in list(st.session_state.items()):
+    if _k.startswith("val_") or _k.startswith("chk_"):
+        st.session_state[f"_p_{_k}"] = _v
+
 # Inject background JavaScript to automatically detect browser autofill on input fields
 # and dispatch synthetic events so Streamlit's React frontend registers the values.
 components.html(
