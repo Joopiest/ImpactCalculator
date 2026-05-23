@@ -913,7 +913,7 @@ elif st.session_state.active_calc_tab == TABS_LIST[1]:
             st.success(f"🏆 [คำนวณอัตโนมัติ] มูลค่า Pre-Impact หมวด B: **{b8:,.2f} บาท**")
 
     # Section C
-    sec_C = st.checkbox("C. ผู้รับบริการมีกำไร/รายได้เพิ่มขึ้น (Revenue/Profit Increase)", key="chk_C", on_change=sync_chk, args=('C',), value=_pc('C'), disabled=st.session_state.chk_B)
+    sec_C = st.checkbox("C. ผู้รับบริการมีกำไร/รายได้เพิ่มขึ้น (Revenue/Profit Increase)", key="chk_C", on_change=sync_chk, args=('C',), value=_pc('C'), disabled=_pc('B'))
     if sec_C:
         with st.container(border=True):
             st.markdown("<h4 style='color: #3b82f6;'>หมวด C: ผู้รับบริการมีกำไร/รายได้เพิ่มขึ้น</h4>", unsafe_allow_html=True)
@@ -934,7 +934,7 @@ elif st.session_state.active_calc_tab == TABS_LIST[1]:
             st.success(f"🏆 [คำนวณอัตโนมัติ] มูลค่า Pre-Impact หมวด C: **{c8:,.2f} บาท**")
 
     # Section D
-    sec_D = st.checkbox("D. ผู้รับบริการประหยัดค่าใช้จ่าย/ลดต้นทุนดำเนินงาน (Cost/Expense Reduction)", key="chk_D", on_change=sync_chk, args=('D',), value=_pc('D'), disabled=st.session_state.chk_B)
+    sec_D = st.checkbox("D. ผู้รับบริการประหยัดค่าใช้จ่าย/ลดต้นทุนดำเนินงาน (Cost/Expense Reduction)", key="chk_D", on_change=sync_chk, args=('D',), value=_pc('D'), disabled=_pc('B'))
     if sec_D:
         with st.container(border=True):
             st.markdown("<h4 style='color: #3b82f6;'>หมวด D: ผู้รับบริการประหยัดค่าใช้จ่าย/ลดต้นทุน</h4>", unsafe_allow_html=True)
@@ -953,7 +953,7 @@ elif st.session_state.active_calc_tab == TABS_LIST[1]:
             st.success(f"🏆 [คำนวณอัตโนมัติ] มูลค่า Pre-Impact หมวด D: **{d6:,.2f} บาท**")
 
     # Section E
-    sec_E = st.checkbox("E. ผู้รับบริการมีประสิทธิภาพการปฏิบัติงานเพิ่มขึ้น (Efficiency Increase)", key="chk_E", on_change=sync_chk, args=('E',), value=_pc('E'), disabled=st.session_state.chk_B)
+    sec_E = st.checkbox("E. ผู้รับบริการมีประสิทธิภาพการปฏิบัติงานเพิ่มขึ้น (Efficiency Increase)", key="chk_E", on_change=sync_chk, args=('E',), value=_pc('E'), disabled=_pc('B'))
     if sec_E:
         with st.container(border=True):
             st.markdown("<h4 style='color: #3b82f6;'>หมวด E: เพิ่มประสิทธิภาพในการทำงาน</h4>", unsafe_allow_html=True)
@@ -980,7 +980,7 @@ elif st.session_state.active_calc_tab == TABS_LIST[1]:
             st.success(f"🏆 [คำนวณอัตโนมัติ] มูลค่า Pre-Impact หมวด E: **{e12:,.2f} บาท**")
 
     # Section F
-    sec_F = st.checkbox("F. การลดระดับความเสี่ยงหรือป้องกันความเสียหาย (Risk Mitigation / Damage Prevention)", key="chk_F", on_change=sync_chk, args=('F',), value=_pc('F'), disabled=st.session_state.chk_B)
+    sec_F = st.checkbox("F. การลดระดับความเสี่ยงหรือป้องกันความเสียหาย (Risk Mitigation / Damage Prevention)", key="chk_F", on_change=sync_chk, args=('F',), value=_pc('F'), disabled=_pc('B'))
     if sec_F:
         with st.container(border=True):
             st.markdown("<h4 style='color: #3b82f6;'>หมวด F: ลดระดับความเสี่ยงหรือความเสียหาย</h4>", unsafe_allow_html=True)
@@ -997,7 +997,7 @@ elif st.session_state.active_calc_tab == TABS_LIST[1]:
             st.success(f"🏆 [คำนวณอัตโนมัติ] มูลค่า Pre-Impact หมวด F: **{f6:,.2f} บาท**")
 
     # Section G
-    sec_G = st.checkbox("G. การพัฒนาสมรรถนะบุคลากรผ่านการฝึกอบรม (Technical Skill Upgrade)", key="chk_G", on_change=sync_chk, args=('G',), value=_pc('G'), disabled=st.session_state.chk_B)
+    sec_G = st.checkbox("G. การพัฒนาสมรรถนะบุคลากรผ่านการฝึกอบรม (Technical Skill Upgrade)", key="chk_G", on_change=sync_chk, args=('G',), value=_pc('G'), disabled=_pc('B'))
     if sec_G:
         with st.container(border=True):
             st.markdown("<h4 style='color: #3b82f6;'>หมวด G: พัฒนาสมรรถนะทักษะบุคลากร</h4>", unsafe_allow_html=True)
