@@ -207,7 +207,7 @@ def sync_val(field_id):
         autosave_to_cloud()
 
 def sync_project_meta():
-    """Callback to sync Tab 1 fields and auto-retrieve drafts from Firestore if ID matches."""
+    """Callback to sync Tab 1 fields, resetting choices when Project ID changes."""
     meta_fields = ["projectId", "projectName", "reportType", "meta_krrn", "meta_krid", "meta_krrn_related", "meta_patent_id"]
     for field in meta_fields:
         w_key = f"wid_{field}"
@@ -218,15 +218,13 @@ def sync_project_meta():
                 st.session_state[w_key] = val
             st.session_state[field] = val
             
-    # Auto-retrieve from cloud if projectId was updated
-    proj_id = st.session_state.get("projectId", "").strip()
-    emp_id = st.session_state.get("employee_id", "").strip()
-    if proj_id and emp_id:
-        last_loaded = st.session_state.get("last_loaded_projectId", "")
-        if proj_id != last_loaded:
-            st.session_state["last_loaded_projectId"] = proj_id
-            # Force cloud fetch for this ID
-            cloud_load_on_startup(force=True)
+    proj_id = st.session_state.get("projectId", "").strip().upper()
+    last_checked_pid = st.session_state.get("last_checked_pid", "")
+    if proj_id != last_checked_pid:
+        st.session_state["last_checked_pid"] = proj_id
+        st.session_state["draft_choice"] = None
+        st.session_state["eval_overwrite_confirmed"] = False
+        st.session_state.pop("draft_loaded_alert", None)
                     
     # Trigger autosave to cloud for extra safety
     autosave_to_cloud()
@@ -413,11 +411,21 @@ def _gm(field):
     return str(val).strip() if val is not None else ""
 
 def autosave_to_cloud(silent=False):
-    """Saves current state to Firestore synchronously."""
+    """Saves current state to Firestore synchronously, with protections for conflicting IDs."""
     if firebase_config.is_db_connected():
         proj_id = st.session_state.get("projectId", "").strip()
         emp_id = st.session_state.get("employee_id", "").strip()
         if proj_id and emp_id:
+            # Safety checks: do not overwrite an existing draft unless the user explicitly loaded it,
+            # and do not overwrite an existing evaluation unless the user explicitly confirmed overwrite.
+            has_draft = firebase_config.check_project_draft(emp_id, proj_id)
+            if has_draft and st.session_state.get("draft_choice") != "load":
+                return
+                
+            has_eval = firebase_config.check_project_submitted(proj_id)
+            if has_eval and not st.session_state.get("eval_overwrite_confirmed", False):
+                return
+                
             payload = get_current_state_payload()
             success = firebase_config.save_draft(emp_id, proj_id, payload)
             if not silent:
@@ -584,14 +592,6 @@ if st.session_state.get("active_calc_tab") in [TABS_LIST[3], TABS_LIST[4]]:
 else:
     render_stepper(2)
 
-# Global Check for duplicate submitted Project ID
-pid_w = st.session_state.get("wid_projectId", "").strip()
-pid_p = st.session_state.get("projectId", "").strip()
-global_pid = (pid_w or pid_p).upper()
-if global_pid and firebase_config.is_db_connected():
-    dup_eval = firebase_config.check_project_submitted(global_pid)
-    if dup_eval:
-        st.warning(f"⚠️ **หมายเหตุ:** รหัสโครงการ **{global_pid}** เคยมีการยื่นส่งรายงานประเมินในระบบแล้วโดยคุณ **{dup_eval.get('employee_id', '-')}** ({dup_eval.get('organization', '-')}) เมื่อ {dup_eval.get('submitted_at_str', '-')}")
 
 
 # 4. Checklist verification helper
@@ -623,33 +623,159 @@ if st.session_state.active_calc_tab == TABS_LIST[0]:
         help="รหัสอ้างอิงโครงการที่จดทะเบียนของหน่วยงาน"
     )
     
-    # ⚠️ Check duplicate project ID inside Tab 1 for immediate warning
+    # ⚠️ Check Project ID Conflicts inside Tab 1
     proj_id_check = st.session_state.get("projectId", "").strip().upper()
+    emp_id = st.session_state.get("employee_id", "").strip()
+    
     if proj_id_check and firebase_config.is_db_connected():
-        dup_eval_tab1 = firebase_config.check_project_submitted(proj_id_check)
-        if dup_eval_tab1:
-            st.markdown(f"""
-            <div style="background-color: rgba(239, 68, 68, 0.1); border-left: 4px solid #ef4444; padding: 1rem; border-radius: 6px; margin: 1rem 0;">
-                <h4 style="color: #ef4444; margin: 0 0 0.5rem 0; font-size: 1.1rem; display: flex; align-items: center;">⚠️ รหัสโครงการนี้เคยมีการบันทึกส่งแล้วในระบบ (Duplicate Project ID)</h4>
-                <p style="color: #cbd5e1; margin: 0; font-size: 0.95rem; line-height: 1.5;">
-                    รหัสโครงการ <b>{proj_id_check}</b> เคยถูกยื่นส่งประเมินโดยคุณ <b>{dup_eval_tab1.get('employee_id', '-')}</b> ({dup_eval_tab1.get('organization', '-')}) เมื่อ {dup_eval_tab1.get('submitted_at_str', '-')}
-                </p>
-                <p style="color: #94a3b8; margin: 0.5rem 0 0 0; font-size: 0.85rem;">
-                    * คุณยังสามารถแก้ไขข้อมูลและดำเนินการต่อได้ แต่เมื่อยื่นส่งรายงานในแท็บ 5 จะต้องติ๊กถูกเพื่อยืนยันการส่งซ้ำ
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
-            
-    # 📂 Show draft loaded notification if applicable
-    if st.session_state.get("draft_loaded_alert") == proj_id_check and proj_id_check:
-        st.markdown(f"""
-        <div style="background-color: rgba(16, 185, 129, 0.1); border-left: 4px solid #10b981; padding: 1rem; border-radius: 6px; margin: 1rem 0;">
-            <h4 style="color: #10b981; margin: 0 0 0.5rem 0; font-size: 1.1rem; display: flex; align-items: center;">📂 ดึงข้อมูลแบบร่างสำเร็จ (Draft Loaded)</h4>
-            <p style="color: #cbd5e1; margin: 0; font-size: 0.95rem; line-height: 1.5;">
-                พบข้อมูลแบบร่างของรหัสโครงการ <b>{proj_id_check}</b> ในระบบคลาวด์ และได้ทำการดึงข้อมูลมาแสดงผลในแบบฟอร์มเรียบร้อยแล้ว
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
+        # Case A: Check if project has already been submitted in Evaluations
+        dup_eval = firebase_config.check_project_submitted(proj_id_check)
+        if dup_eval:
+            st.session_state["draft_choice"] = None  # Reset draft choice if submitted evaluation exists
+            if not st.session_state.get("eval_overwrite_confirmed", False):
+                st.markdown(f"""
+                <div style="background-color: rgba(239, 68, 68, 0.15); border-left: 4px solid #ef4444; padding: 1.2rem; border-radius: 8px; margin: 1rem 0;">
+                    <h4 style="color: #ef4444; margin: 0 0 0.5rem 0; font-size: 1.1rem; font-weight: 700;">🚫 โครงการนี้เคยส่งรายงานประเมินเรียบร้อยแล้ว</h4>
+                    <p style="color: #cbd5e1; margin: 0; font-size: 0.95rem; line-height: 1.6;">
+                        รหัสโครงการ <b>{proj_id_check}</b> เคยถูกยื่นส่งประเมินผลลัพธ์โดยคุณ <b>{dup_eval.get('employee_id', '-')}</b> ({dup_eval.get('organization', '-')}) เมื่อ {dup_eval.get('submitted_at_str', '-')}
+                    </p>
+                    <p style="color: #fca5a5; margin: 0.5rem 0 0 0; font-size: 0.9rem; font-weight: 500;">
+                        ⚠️ ระบบไม่อนุญาตให้ยื่นรหัสโครงการซ้ำในฐานข้อมูล เพื่อใช้เป็น Primary Key ในอนาคต หากต้องการแก้ไขข้อมูลและอัปเดตรายงาน ให้กดยืนยันปุ่มด้านล่างเพื่อดึงรายงานเดิมกลับมาแก้ไขและเตรียมเขียนทับข้อมูลเดิม
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Retrieve to Overwrite button
+                if st.button("🔓 ดึงรายงานกลับมาแก้ไขและเตรียมเขียนทับ (Retrieve to Overwrite)", type="primary", use_container_width=True, key="btn_eval_overwrite"):
+                    # Load evaluation data into the form (just like loading a draft)
+                    sections = dup_eval.get("sections", {})
+                    for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
+                        st.session_state[f"_p_chk_{s}"] = sections.get(s, False)
+                        st.session_state[f"chk_{s}"] = sections.get(s, False)
+                    fields = dup_eval.get("fields", {})
+                    for k, v in FIELD_DEFAULTS.items():
+                        st.session_state[f"_p_val_{k}"] = fields.get(k, v)
+                        st.session_state[f"val_{k}"] = fields.get(k, v)
+                        
+                    st.session_state.projectName = dup_eval.get("project_name", "")
+                    st.session_state.reportType = dup_eval.get("report_type", "รายปี")
+                    st.session_state.meta_krrn = dup_eval.get("meta_krrn", "")
+                    st.session_state.meta_krid = dup_eval.get("meta_krid", "")
+                    st.session_state.meta_krrn_related = dup_eval.get("meta_krrn_related", "")
+                    st.session_state.meta_patent_id = dup_eval.get("meta_patent_id", "")
+                    
+                    st.session_state["wid_projectName"] = dup_eval.get("project_name", "")
+                    st.session_state["wid_reportType"] = dup_eval.get("report_type", "รายปี")
+                    st.session_state["wid_meta_krrn"] = dup_eval.get("meta_krrn", "")
+                    st.session_state["wid_meta_krid"] = dup_eval.get("meta_krid", "")
+                    st.session_state["wid_meta_krrn_related"] = dup_eval.get("meta_krrn_related", "")
+                    st.session_state["wid_meta_patent_id"] = dup_eval.get("meta_patent_id", "")
+                    
+                    st.session_state["eval_overwrite_confirmed"] = True
+                    st.success("🔓 ดึงข้อมูลประเมินเดิมกลับมาในฟอร์มสำเร็จเรียบร้อยแล้ว! (กรุณาไปหน้าถัดไปเพื่อทำการแก้ไข)")
+                    st.rerun()
+            else:
+                # Overwrite mode is active
+                st.markdown(f"""
+                <div style="background-color: rgba(59, 130, 246, 0.1); border-left: 4px solid #3b82f6; padding: 1rem; border-radius: 6px; margin: 1rem 0;">
+                    <h4 style="color: #3b82f6; margin: 0 0 0.25rem 0; font-size: 1rem; font-weight: 700;">🔄 โหมดแก้ไขรายงานเดิม (Overwrite Mode Active)</h4>
+                    <p style="color: #cbd5e1; margin: 0; font-size: 0.9rem;">
+                        ข้อมูลประเมินเดิมถูกโหลดขึ้นฟอร์มแล้ว เมื่อดำเนินการเสร็จสิ้นใน Tab 5 รายงานนี้จะบันทึกแบบเขียนทับรายการเดิมของ <b>{proj_id_check}</b>
+                    </p>
+                </div>
+                """, unsafe_allow_html=True)
+                
+        # Case B: Check if project draft exists in Drafts
+        else:
+            dup_draft = firebase_config.check_project_draft(emp_id, proj_id_check)
+            if dup_draft:
+                choice = st.session_state.get("draft_choice")
+                if choice is None:
+                    st.markdown(f"""
+                    <div style="background-color: rgba(245, 158, 11, 0.15); border-left: 4px solid #f59e0b; padding: 1.2rem; border-radius: 8px; margin: 1rem 0;">
+                        <h4 style="color: #f59e0b; margin: 0 0 0.5rem 0; font-size: 1.1rem; font-weight: 700;">📂 ตรวจพบแบบร่างที่มีอยู่แล้ว (Existing Draft Found)</h4>
+                        <p style="color: #cbd5e1; margin: 0; font-size: 0.95rem; line-height: 1.6;">
+                            ระบบพบข้อมูลแบบร่างของโครงการ <b>{proj_id_check}</b> ที่เคยบันทึกไว้ในชื่อ <i>"{dup_draft.get('project_name', '')}"</i>
+                        </p>
+                        <p style="color: #fef08a; margin: 0.5rem 0 0 0; font-size: 0.9rem; font-weight: 500;">
+                            กรุณาเลือกว่าคุณต้องการดึงข้อมูลแบบร่างเดิมกลับมาแก้ไข หรือต้องการลบแบบร่างทิ้งเพื่อกรอกใหม่ทั้งหมด
+                        </p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    col_load, col_delete = st.columns(2)
+                    with col_load:
+                        if st.button("🔄 โหลดแบบร่างเดิม (Load Draft)", type="primary", use_container_width=True, key="btn_draft_load"):
+                            # Force load draft values
+                            sections = dup_draft.get("sections", {})
+                            for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
+                                st.session_state[f"_p_chk_{s}"] = sections.get(s, False)
+                                st.session_state[f"chk_{s}"] = sections.get(s, False)
+                            fields = dup_draft.get("fields", {})
+                            for k, v in FIELD_DEFAULTS.items():
+                                st.session_state[f"_p_val_{k}"] = fields.get(k, v)
+                                st.session_state[f"val_{k}"] = fields.get(k, v)
+                                
+                            st.session_state.projectName = dup_draft.get("project_name", "")
+                            st.session_state.reportType = dup_draft.get("report_type", "รายปี")
+                            st.session_state.meta_krrn = dup_draft.get("meta_krrn", "")
+                            st.session_state.meta_krid = dup_draft.get("meta_krid", "")
+                            st.session_state.meta_krrn_related = dup_draft.get("meta_krrn_related", "")
+                            st.session_state.meta_patent_id = dup_draft.get("meta_patent_id", "")
+                            
+                            st.session_state["wid_projectName"] = dup_draft.get("project_name", "")
+                            st.session_state["wid_reportType"] = dup_draft.get("report_type", "รายปี")
+                            st.session_state["wid_meta_krrn"] = dup_draft.get("meta_krrn", "")
+                            st.session_state["wid_meta_krid"] = dup_draft.get("meta_krid", "")
+                            st.session_state["wid_meta_krrn_related"] = dup_draft.get("meta_krrn_related", "")
+                            st.session_state["wid_meta_patent_id"] = dup_draft.get("meta_patent_id", "")
+                            
+                            st.session_state["draft_choice"] = "load"
+                            st.session_state["draft_loaded_alert"] = proj_id_check
+                            st.success("🔄 โหลดแบบร่างเรียบร้อยแล้ว!")
+                            st.rerun()
+                    with col_delete:
+                        if st.button("❌ ลบแบบร่างเดิมและเริ่มใหม่ (Delete & Start Fresh)", type="secondary", use_container_width=True, key="btn_draft_delete"):
+                            # Delete draft in cloud
+                            firebase_config.delete_draft(dup_draft.get("id"))
+                            st.session_state["draft_choice"] = "delete"
+                            st.session_state.pop("draft_loaded_alert", None)
+                            
+                            # Clear form values (but keep projectId)
+                            st.session_state.projectName = ""
+                            st.session_state.reportType = "รายปี"
+                            st.session_state.meta_krrn = ""
+                            st.session_state.meta_krid = ""
+                            st.session_state.meta_krrn_related = ""
+                            st.session_state.meta_patent_id = ""
+                            
+                            st.session_state["wid_projectName"] = ""
+                            st.session_state["wid_reportType"] = "รายปี"
+                            st.session_state["wid_meta_krrn"] = ""
+                            st.session_state["wid_meta_krid"] = ""
+                            st.session_state["wid_meta_krrn_related"] = ""
+                            st.session_state["wid_meta_patent_id"] = ""
+                            
+                            for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
+                                st.session_state[f"_p_chk_{s}"] = False
+                                st.session_state[f"chk_{s}"] = False
+                            for k, v in FIELD_DEFAULTS.items():
+                                st.session_state[f"_p_val_{k}"] = v
+                                st.session_state[f"val_{k}"] = v
+                                
+                            st.warning("❌ ลบแบบร่างเดิมเรียบร้อย พร้อมสำหรับการกรอกข้อมูลโครงการใหม่")
+                            st.rerun()
+                elif choice == "load":
+                    st.markdown(f"""
+                    <div style="background-color: rgba(16, 185, 129, 0.1); border-left: 4px solid #10b981; padding: 1rem; border-radius: 6px; margin: 1rem 0;">
+                        <h4 style="color: #10b981; margin: 0 0 0.25rem 0; font-size: 1rem; font-weight: 700;">📂 ดึงข้อมูลแบบร่างสำเร็จ (Draft Loaded)</h4>
+                        <p style="color: #cbd5e1; margin: 0; font-size: 0.9rem;">
+                            แบบร่างของโครงการ <b>{proj_id_check}</b> ถูกโหลดเข้ามาในแบบฟอร์มเรียบร้อยแล้ว
+                        </p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                elif choice == "delete":
+                    st.info("ℹ️ ลบแบบร่างเดิมเรียบร้อยแล้ว ปัจจุบันคุณกำลังดำเนินการเขียนข้อมูลโครงการใหม่ขึ้นทดแทน")
 
     st.text_input(
         "ชื่อโครงการ (Project Name) 👉 [กรอกข้อมูล]",
@@ -1161,19 +1287,21 @@ elif st.session_state.active_calc_tab == TABS_LIST[4]:
     st.markdown("---")
     st.markdown("#### 📤 ยื่นส่งรายงานประเมินผลโครงการ")
     
-    p_id_final = st.session_state.get("projectId", "").strip()
+    p_id_final = st.session_state.get("projectId", "").strip().upper()
     dup_eval = None
     if firebase_config.is_db_connected() and p_id_final:
         dup_eval = firebase_config.check_project_submitted(p_id_final)
         if dup_eval:
-            st.warning(f"⚠️ **โครงการนี้ได้รับการประเมินแล้ว:** รหัสโครงการ **{p_id_final}** เคยถูกส่งรายงานประเมินโดยคุณ **{dup_eval.get('employee_id', '-')}** ({dup_eval.get('organization', '-')}) เมื่อ {dup_eval.get('submitted_at_str', '-')}")
-            st.checkbox("ฉันยืนยันที่จะยื่นส่งรายงานประเมินของรหัสโครงการนี้ซ้ำอีกครั้ง (ระบบจะบันทึกเป็นรายการใหม่)", key="confirm_dup_submit")
-            
+            if st.session_state.get("eval_overwrite_confirmed", False):
+                st.info(f"🔄 **โหมดอัปเดตและเขียนทับ:** ระบบจะทำการบันทึกข้อมูลแบบเขียนทับรายงานเดิมของโครงการ **{p_id_final}** (เพื่อให้ข้อมูล ID มีรายการเดียว ไม่ซ้ำซ้อน)")
+            else:
+                st.error(f"❌ **ตรวจพบรหัสโครงการซ้ำ:** โครงการ **{p_id_final}** เคยส่งรายงานแล้ว หากต้องการดึงรายงานเดิมกลับมาแก้ไขและเขียนทับ โปรดกลับไปกดยืนยันที่ **Tab 1** ก่อนส่งรายงาน")
+                
     submit_clicked = st.button("📤 ส่งและพิมพ์รายงานการประเมิน (Submit & Print)", type="primary", use_container_width=True)
     
     if submit_clicked:
-        if dup_eval and not st.session_state.get("confirm_dup_submit", False):
-            st.error("❌ กรุณาติ๊กถูกที่ช่อง 'ยืนยันที่จะยื่นส่งรายงานประเมินซ้ำ' ก่อนกดส่งรายงาน")
+        if dup_eval and not st.session_state.get("eval_overwrite_confirmed", False):
+            st.error("❌ ไม่สามารถส่งรายงานซ้ำได้: รหัสโครงการนี้เคยถูกใช้ยื่นประเมินแล้ว โปรดกลับไปกดยืนยันการเขียนทับที่ Tab 1 หรือเปลี่ยนรหัสโครงการ")
             st.stop()
             
         if not st.session_state.checklist_passed:

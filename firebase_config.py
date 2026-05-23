@@ -163,21 +163,34 @@ def delete_draft(draft_id):
 
 def submit_evaluation(evaluation_data):
     """
-    Submits a completed evaluation report to Firestore and clears any draft
+    Submits a completed evaluation report to Firestore, enforcing unique project ID,
+    and clears any corresponding draft.
     """
     if not db:
         return False
     try:
-        # Save assessment report
-        doc_ref = db.collection("evaluations").document()
+        project_id = evaluation_data.get("project_id", "").strip().upper()
+        if not project_id:
+            return False
+            
+        # 1. Clean up any existing evaluations with this project_id to prevent duplicates
+        existing_docs = db.collection("evaluations").where("project_id", "==", project_id).stream()
+        for doc in existing_docs:
+            try:
+                doc.reference.delete()
+            except Exception as delete_err:
+                print(f"Error deleting legacy duplicate document {doc.id}: {delete_err}")
+                
+        # 2. Write the new document using project_id as the document ID
+        doc_ref = db.collection("evaluations").document(project_id)
         evaluation_data["submitted_at"] = firestore.SERVER_TIMESTAMP
+        evaluation_data["project_id"] = project_id  # Ensure uppercase inside payload
         doc_ref.set(evaluation_data)
         
-        # Clean up existing draft if any
+        # 3. Clean up existing draft if any
         emp_id = evaluation_data.get("employee_id")
-        proj_id = evaluation_data.get("project_id")
-        if emp_id and proj_id:
-            draft_id = f"draft_{emp_id}_{proj_id}"
+        if emp_id:
+            draft_id = f"draft_{emp_id}_{project_id}"
             db.collection("drafts").document(draft_id).delete()
             
         return True
@@ -273,3 +286,24 @@ def check_project_submitted(project_id):
     except Exception as e:
         print(f"Firestore check_project_submitted error: {e}")
         return None
+
+def check_project_draft(employee_id, project_id):
+    """
+    Checks if a draft exists for this user and project ID
+    Returns the draft data dict if found, or None
+    """
+    if not db or not employee_id or not project_id:
+        return None
+    try:
+        project_id = str(project_id).strip().upper()
+        doc_id = f"draft_{employee_id}_{project_id}"
+        doc = db.collection("drafts").document(doc_id).get()
+        if doc.exists:
+            d = doc.to_dict()
+            d["id"] = doc.id
+            return d
+        return None
+    except Exception as e:
+        print(f"Firestore check_project_draft error: {e}")
+        return None
+
