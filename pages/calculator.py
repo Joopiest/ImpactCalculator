@@ -11,6 +11,8 @@ from datetime import datetime
 for _k, _v in list(st.session_state.items()):
     if _k.startswith("val_") or _k.startswith("chk_"):
         st.session_state[f"_p_{_k}"] = _v
+    elif _k.startswith("wid_"):
+        st.session_state[_k[4:]] = _v
 
 # Fallback initialization in case user navigates here directly, bypassing app.py
 if "authenticated" not in st.session_state:
