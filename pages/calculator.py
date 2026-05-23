@@ -12,7 +12,11 @@ for _k, _v in list(st.session_state.items()):
     if _k.startswith("val_") or _k.startswith("chk_"):
         st.session_state[f"_p_{_k}"] = _v
     elif _k.startswith("wid_"):
-        st.session_state[_k[4:]] = _v
+        val = _v
+        if _k == "wid_projectId" and isinstance(val, str):
+            val = val.upper()
+            st.session_state[_k] = val
+        st.session_state[_k[4:]] = val
 
 # Fallback initialization in case user navigates here directly, bypassing app.py
 if "authenticated" not in st.session_state:
@@ -208,7 +212,11 @@ def sync_project_meta():
     for field in meta_fields:
         w_key = f"wid_{field}"
         if w_key in st.session_state:
-            st.session_state[field] = st.session_state[w_key]
+            val = st.session_state[w_key]
+            if field == "projectId" and isinstance(val, str):
+                val = val.upper()
+                st.session_state[w_key] = val
+            st.session_state[field] = val
             
     # Auto-retrieve from cloud if projectId was updated
     proj_id = st.session_state.get("projectId", "").strip()
@@ -583,7 +591,11 @@ results = compute_results()
 # ==================== TAB 1: PROJECT DETAILS ====================
 if st.session_state.active_calc_tab == TABS_LIST[0]:
     st.markdown("### 📋 กรอกข้อมูลรายละเอียดโครงการ")
-    proj_id = st.session_state.get("projectId", "").strip()
+    # Check wid_projectId first (most immediate widget state) and normalize to uppercase
+    w_pid = st.session_state.get("wid_projectId", "").strip()
+    p_pid = st.session_state.get("projectId", "").strip()
+    proj_id = (w_pid or p_pid).upper()
+    
     st.text_input(
         "รหัสโครงการ (Project ID) 👉 [กรอกข้อมูล]",
         value=st.session_state.get("projectId", ""), key="wid_projectId",

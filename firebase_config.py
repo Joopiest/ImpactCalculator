@@ -246,9 +246,10 @@ def check_project_submitted(project_id):
     Checks if a project ID has already been submitted in evaluations
     Returns the document data dict if found, or None
     """
-    if not db:
+    if not db or not project_id:
         return None
     try:
+        project_id = str(project_id).strip().upper()
         docs = db.collection("evaluations").where("project_id", "==", project_id).limit(1).stream()
         for doc in docs:
             d = doc.to_dict()
