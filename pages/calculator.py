@@ -106,6 +106,8 @@ components.html(
                     const isNavBtn = /Next|Back|ขั้นตอนถัดไป|ย้อนกลับ|บันทึก|เซฟ|Save|Details|Pre-Impact|Pre-Investment|Summary|Submit|Drafts|โหลด|Load|ข้อมูลโครงการ|ประเมิน|สถิติ|Dashboard|ส่งรายงาน/i.test(btnText);
                     
                     if (isNavBtn && !target.hasAttribute('data-sync-delayed')) {
+                        e.stopPropagation();
+                        e.preventDefault();
                         if (window.parent._syncStreamlitInputsNow) {
                             window.parent._syncStreamlitInputsNow(true, false);
                         }
@@ -687,6 +689,7 @@ if st.session_state.active_calc_tab == TABS_LIST[0]:
                     st.session_state["wid_meta_krrn_related"] = dup_eval.get("meta_krrn_related", "")
                     st.session_state["wid_meta_patent_id"] = dup_eval.get("meta_patent_id", "")
                     
+                    st.session_state[f"_cloud_loaded_{proj_id_check}"] = True
                     st.session_state["eval_overwrite_confirmed"] = True
                     st.success("🔓 ดึงข้อมูลประเมินเดิมกลับมาในฟอร์มสำเร็จเรียบร้อยแล้ว! (กรุณาไปหน้าถัดไปเพื่อทำการแก้ไข)")
                     st.rerun()
