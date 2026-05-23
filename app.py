@@ -40,55 +40,58 @@ load_css()
 components.html(
     '''
     <script>
-        if (!window.parent._autofillInterval) {
-            const syncStreamlitInputs = (forceBlur, skipActive) => {
-                const doc = window.parent.document;
-                const inputs = doc.querySelectorAll('input, textarea, select');
-                let hasChanges = false;
-                
-                inputs.forEach(input => {
-                    if (skipActive && input === doc.activeElement) {
-                        return;
-                    }
-
-                    const val = input.value;
-                    const lastVal = input.getAttribute('data-last-synced') || '';
-                    
-                    if (val !== lastVal) {
-                        input.setAttribute('data-last-synced', val);
-                        hasChanges = true;
-                        
-                        const EventConstructor = window.parent.Event;
-                        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.parent.HTMLInputElement.prototype, 'value');
-                        const nativeTextAreaValueSetter = Object.getOwnPropertyDescriptor(window.parent.HTMLTextAreaElement.prototype, 'value');
-                        
-                        if (input.tagName === 'INPUT' && nativeInputValueSetter && nativeInputValueSetter.set) {
-                            nativeInputValueSetter.set.call(input, val);
-                        } else if (input.tagName === 'TEXTAREA' && nativeTextAreaValueSetter && nativeTextAreaValueSetter.set) {
-                            nativeTextAreaValueSetter.set.call(input, val);
-                        }
-                        
-                        input.dispatchEvent(new EventConstructor('input', { bubbles: true }));
-                        input.dispatchEvent(new EventConstructor('change', { bubbles: true }));
-                        input.dispatchEvent(new EventConstructor('blur', { bubbles: true }));
-                    }
-                });
-
-                if (forceBlur) {
-                    const active = doc.activeElement;
-                    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT')) {
-                        active.blur();
-                    }
+        const syncStreamlitInputs = (forceBlur, skipActive) => {
+            const doc = window.parent.document;
+            const inputs = doc.querySelectorAll('input, textarea, select');
+            let hasChanges = false;
+            
+            inputs.forEach(input => {
+                if (skipActive && input === doc.activeElement) {
+                    return;
                 }
-                return hasChanges;
-            };
-            
-            window.parent._syncStreamlitInputsNow = syncStreamlitInputs;
-            
+
+                const val = input.value;
+                const lastVal = input.getAttribute('data-last-synced') || '';
+                
+                if (val !== lastVal) {
+                    input.setAttribute('data-last-synced', val);
+                    hasChanges = true;
+                    
+                    const EventConstructor = window.parent.Event;
+                    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.parent.HTMLInputElement.prototype, 'value');
+                    const nativeTextAreaValueSetter = Object.getOwnPropertyDescriptor(window.parent.HTMLTextAreaElement.prototype, 'value');
+                    
+                    if (input.tagName === 'INPUT' && nativeInputValueSetter && nativeInputValueSetter.set) {
+                        nativeInputValueSetter.set.call(input, val);
+                    } else if (input.tagName === 'TEXTAREA' && nativeTextAreaValueSetter && nativeTextAreaValueSetter.set) {
+                        nativeTextAreaValueSetter.set.call(input, val);
+                    }
+                    
+                    input.dispatchEvent(new EventConstructor('input', { bubbles: true }));
+                    input.dispatchEvent(new EventConstructor('change', { bubbles: true }));
+                    input.dispatchEvent(new EventConstructor('blur', { bubbles: true }));
+                }
+            });
+
+            if (forceBlur) {
+                const active = doc.activeElement;
+                if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT')) {
+                    active.blur();
+                }
+            }
+            return hasChanges;
+        };
+
+        // Always update the sync reference on the parent window to point to the active iframe
+        window.parent._syncStreamlitInputsNow = syncStreamlitInputs;
+
+        if (!window.parent._autofillInterval) {
             let lastSync = 0;
             const syncLoop = (now) => {
                 if (now - lastSync > 200) {
-                    syncStreamlitInputs(false, true);
+                    if (window.parent._syncStreamlitInputsNow) {
+                        window.parent._syncStreamlitInputsNow(false, true);
+                    }
                     lastSync = now;
                 }
                 window.parent.requestAnimationFrame(syncLoop);
@@ -122,7 +125,9 @@ components.html(
                                       btnText.includes('Dashboard') ||
                                       btnText.includes('ส่งรายงาน');
                     if (isNavBtn && !target.hasAttribute('data-sync-delayed')) {
-                        syncStreamlitInputs(true, false);
+                        if (window.parent._syncStreamlitInputsNow) {
+                            window.parent._syncStreamlitInputsNow(true, false);
+                        }
                         target.setAttribute('data-sync-delayed', 'true');
                         window.parent.setTimeout(() => {
                             target.click();
@@ -198,7 +203,7 @@ else:
         <span style="font-size: 0.8rem; color: #94a3b8;">ผู้เข้าใช้งาน (User):</span>
         <div style="font-weight: 800; font-size: 1.1rem; color: #818cf8; margin-top: 0.25rem;">👤 {st.session_state.employee_id}</div>
         <div style="font-size: 0.9rem; color: #06b6d4; margin-top: 0.25rem; font-weight: 500;">🏢 สังกัด: {st.session_state.organization}</div>
-        <div style="font-size: 0.75rem; color: #a1a1aa; margin-top: 0.5rem; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 0.25rem;">🕒 แก้ไขล่าสุด: 23 พ.ค. 2026 - 16:10 น.</div>
+        <div style="font-size: 0.75rem; color: #a1a1aa; margin-top: 0.5rem; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 0.25rem;">🕒 แก้ไขล่าสุด: 23 พ.ค. 2026 - 16:24 น.</div>
     </div>
     """, unsafe_allow_html=True)
     
