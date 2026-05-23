@@ -7,42 +7,31 @@ from datetime import datetime
 # EARLY STATE BACKUP: Prevent Streamlit data loss from unmounted widgets!
 def force_sync_to_shadow():
     """Manually sync all current widget values to their persistent shadow keys."""
-    for _k, _v in list(st.session_state.items()):
+    # Create a snapshot of current keys to avoid 'dictionary changed size during iteration'
+    current_keys = list(st.session_state.keys())
+    for _k in current_keys:
+        _v = st.session_state[_k]
         if _k.startswith("val_") or _k.startswith("chk_"):
             st.session_state[f"_p_{_k}"] = _v
         elif _k.startswith("wid_"):
             field_name = _k[4:]
-            val = _v
-            if field_name == "projectId" and isinstance(val, str):
-                val = val.upper()
-            st.session_state[field_name] = val
+            if field_name == "projectId" and isinstance(_v, str):
+                _v = _v.upper()
+                st.session_state[_k] = _v # Sync uppercase back to widget
+            st.session_state[field_name] = _v # Sync to non-widget key
 
 # Run sync at the very beginning of every rerun
 force_sync_to_shadow()
 
-# Fallback initialization in case user navigates here directly, bypassing app.py
-if "authenticated" not in st.session_state:
-    st.session_state.authenticated = False
-if "checklist_passed" not in st.session_state:
-    st.session_state.checklist_passed = False
-if "checklist_data" not in st.session_state:
-    st.session_state.checklist_data = {}
-if "employee_id" not in st.session_state:
-    st.session_state.employee_id = ""
-if "organization" not in st.session_state:
-    st.session_state.organization = ""
-    
-if not st.session_state.authenticated:
-    st.warning("⚠️ กรุณาเข้าสู่ระบบผ่านหน้าหลักก่อนเข้าใช้งาน")
-    st.stop()
+# ... (Checklist/Auth blocks) ...
 
 # Hidden button for JS to trigger a clean sync/rerun
-if st.button("SYNC_TRIGGER", key="js_sync_trigger", help="Internal use only"):
+if st.button("SYNC_TRIGGER", key="js_sync_trigger"):
     force_sync_to_shadow()
     st.rerun()
 
 # CSS to hide the internal trigger button
-st.markdown("<style>div[data-testid='stButton'] button:has(div:contains('SYNC_TRIGGER')) { display: none; }</style>", unsafe_allow_html=True)
+st.markdown("<style>div[data-testid='stButton'] button:has(div:contains('SYNC_TRIGGER')) { display: none !important; }</style>", unsafe_allow_html=True)
 
 # Inject background JavaScript to automatically detect browser autofill on input fields
 # and dispatch synthetic events so Streamlit's React frontend registers the values.
@@ -67,15 +56,23 @@ components.html(
                         input.setAttribute('data-last-synced', val);
                         hasChanges = true;
                         
-                        // React 15/16+ Value Setter Override
-                        const prototype = Object.getPrototypeOf(input);
-                        const descriptor = Object.getOwnPropertyDescriptor(prototype, 'value');
-                        if (descriptor && descriptor.set) {
-                            descriptor.set.call(input, val);
+                        // Use parent window constructors for cross-iframe compatibility
+                        const EventConstructor = window.parent.Event;
+                        
+                        // React 15/16+ Value Setter Override (Stable version technique)
+                        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.parent.HTMLInputElement.prototype, 'value');
+                        const nativeTextAreaValueSetter = Object.getOwnPropertyDescriptor(window.parent.HTMLTextAreaElement.prototype, 'value');
+                        
+                        if (input.tagName === 'INPUT' && nativeInputValueSetter && nativeInputValueSetter.set) {
+                            nativeInputValueSetter.set.call(input, val);
+                        } else if (input.tagName === 'TEXTAREA' && nativeTextAreaValueSetter && nativeTextAreaValueSetter.set) {
+                            nativeTextAreaValueSetter.set.call(input, val);
                         }
                         
-                        input.dispatchEvent(new Event('input', { bubbles: true }));
-                        input.dispatchEvent(new Event('change', { bubbles: true }));
+                        // Dispatch all 3 events to ensure Streamlit's React listeners catch it
+                        input.dispatchEvent(new EventConstructor('input', { bubbles: true }));
+                        input.dispatchEvent(new EventConstructor('change', { bubbles: true }));
+                        input.dispatchEvent(new EventConstructor('blur', { bubbles: true }));
                     }
                 });
 
@@ -93,7 +90,7 @@ components.html(
             // Sync loop
             let lastSync = 0;
             const syncLoop = (now) => {
-                if (now - lastSync > 150) { 
+                if (now - lastSync > 200) { 
                     syncStreamlitInputs(false, true);
                     lastSync = now;
                 }
@@ -110,7 +107,6 @@ components.html(
                     const isNavBtn = /Next|Back|ขั้นตอนถัดไป|ย้อนกลับ|บันทึก|เซฟ|Save|Details|Pre-Impact|Pre-Investment|Summary|Submit|Drafts|โหลด|Load|ข้อมูลโครงการ|ประเมิน|สถิติ|Dashboard|ส่งรายงาน/i.test(btnText);
                     
                     if (isNavBtn && !target.hasAttribute('data-sync-delayed')) {
-                        // Force a sync and potential trigger click
                         const hadChanges = syncStreamlitInputs(true, false);
                         
                         if (hadChanges) {
@@ -118,26 +114,23 @@ components.html(
                             e.stopPropagation();
                             
                             // Find our hidden trigger button and click it to force a rerun
-                            const triggerBtn = doc.querySelector('button:has(div:contains("SYNC_TRIGGER"))');
-                            if (triggerBtn) {
-                                triggerBtn.click();
+                            const buttons = doc.querySelectorAll('button');
+                            for (const btn of buttons) {
+                                if (btn.textContent.includes('SYNC_TRIGGER')) {
+                                    btn.click();
+                                    break;
+                                }
                             }
                             
                             target.setAttribute('data-sync-delayed', 'true');
                             setTimeout(() => {
                                 target.click();
                                 target.removeAttribute('data-sync-delayed');
-                            }, 500); 
+                            }, 450); 
                         }
                     }
                 }
             }, true);
-            
-            window.parent.document.addEventListener('mouseover', (e) => {
-                if (e.target.closest('button, [role="tab"], [data-testid="stSegmentedControlItem"]')) {
-                    syncStreamlitInputs(false, true);
-                }
-            });
         }
     </script>
     ''',
