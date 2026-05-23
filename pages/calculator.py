@@ -35,6 +35,18 @@ if not st.session_state.authenticated:
     st.warning("⚠️ กรุณาเข้าสู่ระบบผ่านหน้าหลักก่อนเข้าใช้งาน")
     st.stop()
 
+# Defensive fallback check for new projects:
+# In Streamlit, concurrent reruns can abort callbacks like sync_project_meta, 
+# leaving the _cloud_loaded flag unset. We verify it defensively in the main flow.
+proj_id = st.session_state.get("projectId", "").strip().upper()
+if proj_id and firebase_config.is_db_connected():
+    cache_flag = f"_cloud_loaded_{proj_id}"
+    if cache_flag not in st.session_state:
+        has_draft = firebase_config.check_project_draft(st.session_state.get("employee_id", ""), proj_id)
+        has_eval = firebase_config.check_project_submitted(proj_id)
+        if not has_draft and not has_eval:
+            st.session_state[cache_flag] = True
+
 # Inject background JavaScript to automatically detect browser autofill on input fields
 # and dispatch synthetic events so Streamlit's React frontend registers the values.
 components.html(
@@ -111,10 +123,30 @@ components.html(
                         if (window.parent._syncStreamlitInputsNow) {
                             window.parent._syncStreamlitInputsNow(true, false);
                         }
-                        target.setAttribute('data-sync-delayed', 'true');
+                        
+                        const savedText = target.textContent;
+                        const savedTestId = target.getAttribute('data-testid');
+                        
                         window.parent.setTimeout(() => {
-                            target.click();
-                            target.removeAttribute('data-sync-delayed');
+                            const doc = window.parent.document;
+                            let found = null;
+                            const selector = 'button, [role="button"], [role="option"], [role="tab"], [data-testid="stSegmentedControlItem"], [data-testid="stSidebarNavLink"], label';
+                            const elements = doc.querySelectorAll(selector);
+                            for (let el of elements) {
+                                if (el.textContent === savedText) {
+                                    found = el;
+                                    break;
+                                }
+                            }
+                            if (!found && savedTestId) {
+                                found = doc.querySelector(`[data-testid="${savedTestId}"]`);
+                            }
+                            if (!found) {
+                                found = target;
+                            }
+                            found.setAttribute('data-sync-delayed', 'true');
+                            found.click();
+                            found.removeAttribute('data-sync-delayed');
                         }, 450); 
                     }
                 }
@@ -749,6 +781,7 @@ if st.session_state.active_calc_tab == TABS_LIST[0]:
                             st.session_state["wid_meta_krrn_related"] = dup_draft.get("meta_krrn_related", "")
                             st.session_state["wid_meta_patent_id"] = dup_draft.get("meta_patent_id", "")
                             
+                            st.session_state[f"_cloud_loaded_{proj_id_check}"] = True
                             st.session_state["draft_choice"] = "load"
                             st.session_state["draft_loaded_alert"] = proj_id_check
                             st.success("🔄 โหลดแบบร่างเรียบร้อยแล้ว!")
@@ -782,6 +815,7 @@ if st.session_state.active_calc_tab == TABS_LIST[0]:
                                 st.session_state[f"_p_val_{k}"] = v
                                 st.session_state[f"val_{k}"] = v
                                 
+                            st.session_state[f"_cloud_loaded_{proj_id_check}"] = True
                             st.warning("❌ ลบแบบร่างเดิมเรียบร้อย พร้อมสำหรับการกรอกข้อมูลโครงการใหม่")
                             st.rerun()
                 elif choice == "load":

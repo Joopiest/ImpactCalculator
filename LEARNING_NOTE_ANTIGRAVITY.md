@@ -22,42 +22,77 @@ In Streamlit, when a user switches tabs, any widgets in the hidden tab are **unm
 
 ---
 
-## 2. Problem: Browser Autofill Not Registering
+## 2. Problem: Browser Autofill & Delayed Tab Switching
 ### 🔍 Root Cause
-Browser autofill (Chrome/Edge/Password Managers) often injects values into `<input>` tags without triggering standard JavaScript `input` or `change` events. Streamlit's React frontend doesn't "see" these values, so they never reach the Python backend.
+1.  **Autofill Detection:** Browser autofill (Chrome/Edge/Password Managers) often injects values into `<input>` tags without triggering standard JavaScript `input` or `change` events. Streamlit's React frontend doesn't "see" these values.
+2.  **Detached Element Clicks:** The click-trap navigation engine intercepts clicks on buttons/tabs, blurs the active input, waits 450ms, and then triggers the original click. However, since the blur event triggers a rerun, Streamlit re-renders components. The original clicked element becomes **detached** from the DOM tree, and clicking a detached element does not bubble to React.
 
-### 🛠️ Solution: Aggressive JavaScript Sync Engine
-*   **React Value Setter Override:** Standard `.value = val` assignments are ignored by React's internal state trackers. We must use the native property descriptor setter.
-*   **Cross-Iframe Events:** Since Streamlit components run in iframes, we must use `window.parent.Event` to ensure the main Streamlit window hears the triggers.
-*   **Click-Trap Navigation:** Intercept clicks on navigation buttons and tabs. Prevent the click, force a manual `blur()` and `sync` on all inputs, wait 450ms, then resume the click.
+### 🛠️ Solution: Event Interception & Fresh DOM Lookups
+*   **Aggressive Sync:** Dispatch synthetic `input`, `change`, and `blur` events using React value setters inside the parent window context.
+*   **Click-Trap Event Blocking:** Use `e.stopPropagation()` and `e.preventDefault()` on intercepted clicks to block instant navigation, allowing the blur events to process first.
+*   **Fresh DOM Node Lookup:** Save the element text and `data-testid` before unmounting. In the `setTimeout` callback, query the *active* DOM tree to find the newly-rendered matching element instead of clicking the detached reference.
 *   **Implementation Key:**
     ```javascript
-    const EventConstructor = window.parent.Event;
-    const nativeSetter = Object.getOwnPropertyDescriptor(window.parent.HTMLInputElement.prototype, 'value');
-    nativeSetter.set.call(input, val);
-    input.dispatchEvent(new EventConstructor('input', { bubbles: true }));
-    input.dispatchEvent(new EventConstructor('blur', { bubbles: true }));
+    window.parent.document.addEventListener('click', (e) => {
+        const target = e.target.closest('button, [role="button"], [role="tab"], ...');
+        if (target && !target.hasAttribute('data-sync-delayed')) {
+            e.stopPropagation();
+            e.preventDefault();
+            
+            // Sync current active element values
+            if (window.parent._syncStreamlitInputsNow) {
+                window.parent._syncStreamlitInputsNow(true, false);
+            }
+            
+            const savedText = target.textContent;
+            const savedTestId = target.getAttribute('data-testid');
+            
+            window.parent.setTimeout(() => {
+                const doc = window.parent.document;
+                let found = null;
+                // Query fresh active DOM elements matching the saved text or ID
+                const elements = doc.querySelectorAll('button, [role="button"], [role="tab"], ...');
+                for (let el of elements) {
+                    if (el.textContent === savedText) { found = el; break; }
+                }
+                if (!found && savedTestId) {
+                    found = doc.querySelector(`[data-testid="${savedTestId}"]`);
+                }
+                if (!found) found = target; // Fallback
+                
+                found.setAttribute('data-sync-delayed', 'true');
+                found.click();
+                found.removeAttribute('data-sync-delayed');
+            }, 450);
+        }
+    }, true);
     ```
 
 ---
 
-## 3. Problem: StreamlitAPIException (State Conflict)
+## 3. Problem: Streamlit Rerun Callback Bypassing
 ### 🔍 Root Cause
-Trying to programmatically update a widget-linked key (e.g., `st.session_state.wid_projectId = val`) *after* that widget has already been rendered on the current screen. Streamlit throws an exception to prevent inconsistent UI states.
+Streamlit is single-threaded per session. When multiple events are queued (e.g. typing in a field then immediately clicking a navigation tab), Streamlit aborts the first rerun and processes the new rerun. In doing so, widget `on_change` callbacks (such as `sync_project_meta` setting the alignment flag `_cloud_loaded_{projectId} = True`) can be bypassed or skipped, leaving the app in an unaligned state.
 
-### 🛠️ Solution: Defensive Callback Pattern
-*   Perform all state normalization (like `.upper()` or formatting) inside the `on_change` callback function, **not** inside the main page flow or button blocks.
-*   Use `try-except` blocks around widget key assignments to prevent app crashes during unexpected race conditions.
+### 🛠️ Solution: Defensive Main-Flow Fallback
+*   Do **NOT** rely solely on `on_change` callbacks for setting critical workflow flags.
+*   Implement a check in the main execution flow that executes on every rerun to verify and set states defensively.
+*   **Implementation:**
+    ```python
+    proj_id = st.session_state.get("projectId", "").strip().upper()
+    if proj_id and firebase_config.is_db_connected():
+        cache_flag = f"_cloud_loaded_{proj_id}"
+        if cache_flag not in st.session_state:
+            # Query Firestore defensively to see if it is a fresh project
+            has_draft = firebase_config.check_project_draft(st.session_state.employee_id, proj_id)
+            has_eval = firebase_config.check_project_submitted(proj_id)
+            if not has_draft and not has_eval:
+                st.session_state[cache_flag] = True
+    ```
 
 ---
 
-## 4. Feature: Unique Project ID Enforcement
+## 4. Feature: Unique Project ID Enforcement & Conflicts
 ### 🛠️ Solution: "Retrieve to Overwrite" Workflow
-*   **Step 1:** Check Firestore immediately when a Project ID is entered.
-*   **Step 2:** If ID exists, present a choice: **"Delete & Start Fresh"** or **"Retrieve to Overwrite"**.
-*   **Step 3:** Loading data is done by populating both the Widget Keys (for UI) and Shadow Keys (for persistence).
-*   **Step 4:** Locked Autosave: Prevent `autosave_to_cloud` from firing until the user has explicitly resolved the conflict via the provided buttons.
-
----
-
-**Note to Antigravity IDE:** When dealing with high-stakes data entry in Streamlit, always prioritize **Shadow Key Cloning** over standard widget state. Direct browser-to-backend communication via synthetic JS events is required for a professional "Autofill" experience.
+*   **Conflict Detection:** Check Firestore when a Project ID is entered.
+*   **State Alignment:** Conflict resolution buttons ("Load Draft", "Delete & Start Fresh", "Retrieve to Overwrite") must explicitly set the `_cloud_loaded_{projectId} = True` flag in their callbacks to align states and enable autosave.

@@ -130,10 +130,30 @@ components.html(
                         if (window.parent._syncStreamlitInputsNow) {
                             window.parent._syncStreamlitInputsNow(true, false);
                         }
-                        target.setAttribute('data-sync-delayed', 'true');
+                        
+                        const savedText = target.textContent;
+                        const savedTestId = target.getAttribute('data-testid');
+                        
                         window.parent.setTimeout(() => {
-                            target.click();
-                            target.removeAttribute('data-sync-delayed');
+                            const doc = window.parent.document;
+                            let found = null;
+                            const selector = 'button, [role="button"], [role="option"], [role="tab"], [data-testid="stSegmentedControlItem"], [data-testid="stSidebarNavLink"], label';
+                            const elements = doc.querySelectorAll(selector);
+                            for (let el of elements) {
+                                if (el.textContent === savedText) {
+                                    found = el;
+                                    break;
+                                }
+                            }
+                            if (!found && savedTestId) {
+                                found = doc.querySelector(`[data-testid="${savedTestId}"]`);
+                            }
+                            if (!found) {
+                                found = target;
+                            }
+                            found.setAttribute('data-sync-delayed', 'true');
+                            found.click();
+                            found.removeAttribute('data-sync-delayed');
                         }, 400);
                     }
                 }
@@ -205,7 +225,7 @@ else:
         <span style="font-size: 0.8rem; color: #94a3b8;">ผู้เข้าใช้งาน (User):</span>
         <div style="font-weight: 800; font-size: 1.1rem; color: #818cf8; margin-top: 0.25rem;">👤 {st.session_state.employee_id}</div>
         <div style="font-size: 0.9rem; color: #06b6d4; margin-top: 0.25rem; font-weight: 500;">🏢 สังกัด: {st.session_state.organization}</div>
-        <div style="font-size: 0.75rem; color: #a1a1aa; margin-top: 0.5rem; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 0.25rem;">🕒 แก้ไขล่าสุด: 23 พ.ค. 2026 - 17:00 น.</div>
+        <div style="font-size: 0.75rem; color: #a1a1aa; margin-top: 0.5rem; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 0.25rem;">🕒 แก้ไขล่าสุด: 23 พ.ค. 2026 - 22:46 น.</div>
     </div>
     """, unsafe_allow_html=True)
     
