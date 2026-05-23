@@ -570,7 +570,9 @@ else:
     render_stepper(2)
 
 # Global Check for duplicate submitted Project ID
-global_pid = st.session_state.get("projectId", st.session_state.get("wid_projectId", "")).strip().upper()
+pid_w = st.session_state.get("wid_projectId", "").strip()
+pid_p = st.session_state.get("projectId", "").strip()
+global_pid = (pid_w or pid_p).upper()
 if global_pid and firebase_config.is_db_connected():
     dup_eval = firebase_config.check_project_submitted(global_pid)
     if dup_eval:
