@@ -53,7 +53,9 @@ is_mock = False
 evaluations_list = []
 
 if firebase_config.is_db_connected():
-    db_stats = firebase_config.get_dashboard_stats()
+    with st.spinner("⏳ กำลังดึงข้อมูลสถิติจากระบบคลาวด์..."):
+        db_stats = firebase_config.get_dashboard_stats()
+    
     if db_stats is not None:
         evaluations_list = db_stats["evaluations"]
         if db_stats["total"] > 0:
@@ -188,6 +190,16 @@ if search_term:
     ]
 if filter_org != "ทั้งหมด":
     filtered_df = filtered_df[filtered_df["organization"] == filter_org]
+
+# 📥 CSV Export Button
+csv_data = filtered_df.to_csv(index=False).encode('utf-8-sig')
+col_search.download_button(
+    label="⬇️ ดาวน์โหลดข้อมูล (CSV)",
+    data=csv_data,
+    file_name=f"impact_evaluations_{datetime.now().strftime('%Y%m%d')}.csv",
+    mime="text/csv",
+    type="secondary"
+)
 
 # Format fields for readable table
 table_df = filtered_df[[

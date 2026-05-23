@@ -225,6 +225,14 @@ def sync_project_meta():
         st.session_state["draft_choice"] = None
         st.session_state["eval_overwrite_confirmed"] = False
         st.session_state.pop("draft_loaded_alert", None)
+        
+        # Check if there is NO draft and NO evaluation for this project ID.
+        # If so, we are starting fresh, so we can mark it as aligned (loaded) immediately!
+        if proj_id and firebase_config.is_db_connected():
+            has_draft = firebase_config.check_project_draft(st.session_state.employee_id, proj_id)
+            has_eval = firebase_config.check_project_submitted(proj_id)
+            if not has_draft and not has_eval:
+                st.session_state[f"_cloud_loaded_{proj_id}"] = True
                     
     # Trigger autosave to cloud for extra safety
     autosave_to_cloud()
@@ -416,14 +424,9 @@ def autosave_to_cloud(silent=False):
         proj_id = st.session_state.get("projectId", "").strip()
         emp_id = st.session_state.get("employee_id", "").strip()
         if proj_id and emp_id:
-            # Safety checks: do not overwrite an existing draft unless the user explicitly loaded it,
-            # and do not overwrite an existing evaluation unless the user explicitly confirmed overwrite.
-            has_draft = firebase_config.check_project_draft(emp_id, proj_id)
-            if has_draft and st.session_state.get("draft_choice") != "load":
-                return
-                
-            has_eval = firebase_config.check_project_submitted(proj_id)
-            if has_eval and not st.session_state.get("eval_overwrite_confirmed", False):
+            # Safety checks: do not autosave if the project has a conflict (draft/evaluation exists)
+            # and the user has not resolved it by choosing to load/delete/overwrite yet.
+            if not st.session_state.get(f"_cloud_loaded_{proj_id}", False):
                 return
                 
             payload = get_current_state_payload()
@@ -1370,11 +1373,12 @@ elif st.session_state.active_calc_tab == TABS_LIST[4]:
             # Fire database write
             save_success = False
             if firebase_config.is_db_connected():
-                if firebase_config.submit_evaluation(eval_payload):
-                    st.success("✅ บันทึกข้อมูลไปยังคลาวด์ Firebase สำเร็จ!")
-                    save_success = True
-                else:
-                    st.error("❌ ไม่สามารถบันทึกข้อมูลไปยัง Firebase ได้ โปรดตรวจสอบการเชื่อมต่อ")
+                with st.spinner("⏳ กำลังบันทึกข้อมูลไปยังระบบคลาวด์..."):
+                    if firebase_config.submit_evaluation(eval_payload):
+                        st.success("✅ บันทึกข้อมูลไปยังคลาวด์ Firebase สำเร็จ!")
+                        save_success = True
+                    else:
+                        st.error("❌ ไม่สามารถบันทึกข้อมูลไปยัง Firebase ได้ โปรดตรวจสอบการเชื่อมต่อ")
             else:
                 st.warning("⚠️ ทำงานในโหมด Offline: ข้อมูลถูกส่งไปยัง Google Sheets เท่านั้น (ไม่บันทึกลงฐานข้อมูลหลัก)")
                 
