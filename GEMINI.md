@@ -14,3 +14,7 @@ The following architectural patterns are MANDATORY for this project. Before modi
 
 ### 3. Conflict Resolution
 - **Rule:** Project IDs must be unique. Follow the "Retrieve to Overwrite" workflow defined in the documentation.
+
+### 4. Modification Timestamp
+- **Rule:** Before committing or pushing any code changes, ALWAYS update the latest edit timestamp inside the sidebar user profile in `app.py`.
+- **Format:** Use the format `🕒 แก้ไขล่าสุด: [วัน] พ.ค. [ปี ค.ศ.] - [เวลา] น.` with the actual local time of the modification (e.g. `23 พ.ค. 2026 - 16:06 น.`).
