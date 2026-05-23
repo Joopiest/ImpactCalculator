@@ -392,26 +392,40 @@ flowchart LR
 ### Implementation Pattern
 
 ```python
-# 1. Define shadow key
-shadow_key = f"_shadow_{field_name}"
+# 1. Read value using helper that queries active widget state, falling back to shadow key
+def _pv(key, default=0.0):
+    w_key = f"val_{key}"
+    p_key = f"_p_val_{key}"
+    if w_key in st.session_state:
+        st.session_state[p_key] = st.session_state[w_key]
+        return st.session_state[w_key]
+    p_val = st.session_state.get(p_key)
+    if p_val is not None: return p_val
+    return default
 
-# 2. Initialize shadow key if not exists
-if shadow_key not in st.session_state:
-    st.session_state[shadow_key] = default_value
-
-# 3. Create widget with shadow as default
+# 2. Render widget using shadow key fallback
 value = st.number_input(
     label="Field Label",
-    value=st.session_state[shadow_key],
-    key=f"widget_{field_name}",
-    on_change=lambda: setattr(
-        st.session_state, shadow_key,
-        st.session_state[f"widget_{field_name}"]
-    )
+    value=float(_pv(field_id, default_value)),
+    key=f"val_{field_id}",
+    on_change=sync_val,
+    args=(field_id,)
 )
+```
 
-# 4. Update shadow key
-st.session_state[shadow_key] = value
+### Top-Level Shadow Key Cloning Loop
+At the very beginning of `pages/calculator.py`, before any widgets are rendered or deleted during a rerun:
+```python
+for _k, _v in list(st.session_state.items()):
+    if _k.startswith("val_") or _k.startswith("chk_"):
+        st.session_state[f"_p_{_k}"] = _v
+    elif _k.startswith("wid_"):
+        field_name = _k[4:]
+        val = _v
+        if field_name == "projectId" and isinstance(val, str):
+            val = val.upper()
+            st.session_state[_k] = val
+        st.session_state[field_name] = val
 ```
 
 ### Benefits
@@ -428,17 +442,22 @@ st.session_state[shadow_key] = value
 
 ### 7.1 Real-time Cloud Autosave
 
-The `on_change` callback pattern has been extended to perform **Real-time Autosave** to Firebase Firestore. Every time a user changes a field and clicks away, the shadow key is updated, and the `autosave_to_cloud()` function fires asynchronously to sync the current state to the cloud.
+The `on_change` callback pattern has been extended to perform **Real-time Autosave** to Firebase Firestore. Every time a user changes a field and clicks away, the shadow key is updated, and the `autosave_to_cloud()` function fires synchronously to sync the current state to the cloud. Autosave is guarded and only triggers if the Project ID has been validated and aligned.
 
 ### 7.2 Browser Autofill Workaround (JavaScript Click Trap)
 
-A known limitation in Streamlit is its inability to detect values injected by browser Autofill systems (e.g., Chrome Autofill, password managers) if the user does not press Enter or click outside the field before navigating away (such as clicking a Tab).
+A known limitation in Streamlit is its inability to detect values injected by browser Autofill systems if the user does not trigger standard React change handlers (e.g. by clicking a navigation element directly).
 
-To solve this, the application injects a custom JavaScript payload (`components.html(js_code)`) at the top of the calculator. This script:
-1. Listens for `mousedown` events on the entire document.
-2. Identifies if the target is a UI navigation element (like tabs, buttons, or labels).
-3. Finds the currently active input element (`document.activeElement`).
-4. Manually dispatches a `blur()` event and a synthetic `change` event to force Streamlit's React frontend to register the autofilled value before the navigation event processes.
+To solve this, the application injects a custom JavaScript payload at the top of the calculator. This script:
+1. Listens for `click` events on UI navigation elements (like buttons, tabs, options, and sidebar links).
+2. Intercepts the click, calls `syncStreamlitInputs(true, false)` (which triggers `blur()` and dispatches synthetic `input`, `change`, and `blur` events using `window.parent.Event` for compatibility inside the Streamlit iframe).
+3. Adds a custom `data-sync-delayed` attribute and delays the original click event by 450ms, allowing Streamlit's React frontend to register the updated inputs before the page transitions.
+
+### 7.3 Conflict Resolution ("Retrieve to Overwrite" Workflow)
+
+To enforce Project ID uniqueness across the Firestore database:
+- **Existing Draft Found**: Upon entering a Project ID in Tab 1, if an active draft exists in Firestore, the user is prompted to either **"Load Draft"** (loading keys into both widget and shadow states) or **"Delete & Start Fresh"** (deleting the draft and clearing the form).
+- **Submitted Evaluation Found**: If the Project ID has already been submitted, the submission is blocked in Tab 5, and Tab 1 displays a warning with a **"Retrieve to Overwrite"** option. Clicking this retrieves the previous evaluation data into the form, activates **Overwrite Mode**, and permits the user to resubmit and overwrite the existing Firestore document using the Project ID as the document ID.
 
 ---
 

@@ -440,13 +440,21 @@ __pycache__/
 venv/
 .env
 
-# IDE
+# IDE, OS, and backup files
 .vscode/
 .idea/
-
-# OS
 .DS_Store
 Thumbs.db
+*_stable.py
+*_backup.py
+calculator_stable.py
+
+# Local testing caches
+.pytest_cache/
+Digg Like/
+
+# Deployment & custom local copy directories
+NAPAT_github_deploy/
 ```
 
 ---
