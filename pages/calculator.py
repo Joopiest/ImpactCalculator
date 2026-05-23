@@ -569,6 +569,13 @@ if st.session_state.get("active_calc_tab") in [TABS_LIST[3], TABS_LIST[4]]:
 else:
     render_stepper(2)
 
+# Global Check for duplicate submitted Project ID
+global_pid = st.session_state.get("projectId", st.session_state.get("wid_projectId", "")).strip().upper()
+if global_pid and firebase_config.is_db_connected():
+    dup_eval = firebase_config.check_project_submitted(global_pid)
+    if dup_eval:
+        st.warning(f"⚠️ **หมายเหตุ:** รหัสโครงการ **{global_pid}** เคยมีการยื่นส่งรายงานประเมินในระบบแล้วโดยคุณ **{dup_eval.get('employee_id', '-')}** ({dup_eval.get('organization', '-')}) เมื่อ {dup_eval.get('submitted_at_str', '-')}")
+
 
 # 4. Checklist verification helper
 def render_checklist_lockout(tab_name):
@@ -591,11 +598,6 @@ results = compute_results()
 # ==================== TAB 1: PROJECT DETAILS ====================
 if st.session_state.active_calc_tab == TABS_LIST[0]:
     st.markdown("### 📋 กรอกข้อมูลรายละเอียดโครงการ")
-    # Check wid_projectId first (most immediate widget state) and normalize to uppercase
-    w_pid = st.session_state.get("wid_projectId", "").strip()
-    p_pid = st.session_state.get("projectId", "").strip()
-    proj_id = (w_pid or p_pid).upper()
-    
     st.text_input(
         "รหัสโครงการ (Project ID) 👉 [กรอกข้อมูล]",
         value=st.session_state.get("projectId", ""), key="wid_projectId",
@@ -603,10 +605,6 @@ if st.session_state.active_calc_tab == TABS_LIST[0]:
         placeholder="เช่น P-20-XXXXX",
         help="รหัสอ้างอิงโครงการที่จดทะเบียนของหน่วยงาน"
     )
-    if proj_id and firebase_config.is_db_connected():
-        dup_eval = firebase_config.check_project_submitted(proj_id)
-        if dup_eval:
-            st.warning(f"⚠️ **หมายเหตุ:** รหัสโครงการนี้เคยมีการยื่นส่งรายงานประเมินในระบบแล้วโดยคุณ **{dup_eval.get('employee_id', '-')}** ({dup_eval.get('organization', '-')}) เมื่อ {dup_eval.get('submitted_at_str', '-')}")
     st.text_input(
         "ชื่อโครงการ (Project Name) 👉 [กรอกข้อมูล]",
         

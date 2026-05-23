@@ -34,7 +34,12 @@ try:
                     cred = credentials.Certificate(fallback_path)
                     firebase_admin.initialize_app(cred)
                 else:
-                    raise FileNotFoundError("Firebase credentials JSON file not found locally and no Streamlit Secrets configured.")
+                    deploy_path = os.path.join(current_dir, "NAPAT_github_deploy", cred_path)
+                    if os.path.exists(deploy_path):
+                        cred = credentials.Certificate(deploy_path)
+                        firebase_admin.initialize_app(cred)
+                    else:
+                        raise FileNotFoundError("Firebase credentials JSON file not found locally and no Streamlit Secrets configured.")
 except Exception as e:
     print(f"Error initializing Firebase Admin: {e}")
 
