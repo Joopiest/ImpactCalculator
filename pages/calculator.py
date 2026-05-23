@@ -235,7 +235,14 @@ def sync_project_meta():
             val = st.session_state[w_key]
             if field == "projectId" and isinstance(val, str):
                 val = val.upper()
-                st.session_state[w_key] = val
+                # Safety: only update widget key if it's different to avoid redundant triggers
+                # and avoid StreamlitAPIException when called outside of callback context.
+                if st.session_state[w_key] != val:
+                    try:
+                        st.session_state[w_key] = val
+                    except st.errors.StreamlitAPIException:
+                        # Fallback if we can't update the widget key directly (e.g. after render)
+                        pass
             st.session_state[field] = val
             
     proj_id = st.session_state.get("projectId", "").strip().upper()
