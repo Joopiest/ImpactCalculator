@@ -168,6 +168,13 @@ components.html(
                     }
                 }
             }, true);
+
+            window.parent.document.addEventListener('mouseover', (e) => {
+                const target = e.target.closest('button, [role="button"], [role="option"], [role="tab"], [data-testid="stSegmentedControlItem"], [data-testid="stSidebarNavLink"], label');
+                if (target && window.parent._syncStreamlitInputsNow) {
+                    window.parent._syncStreamlitInputsNow(false, true);
+                }
+            });
         }
     </script>
     ''',
