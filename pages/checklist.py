@@ -1,5 +1,11 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import firebase_config
+
+# EARLY STATE BACKUP: Prevent Streamlit data loss from unmounted widgets!
+for _k, _v in list(st.session_state.items()):
+    if _k.startswith("chk_") or _k.startswith("val_") or _k.startswith("wid_"):
+        st.session_state[f"_p_{_k}"] = _v
 
 # Fallback initialization in case user navigates here directly, bypassing app.py
 if "authenticated" not in st.session_state:
@@ -47,25 +53,153 @@ def render_stepper(current_step):
 
 render_stepper(1)
 
+# Inject background JavaScript to automatically detect browser autofill on input fields
+# and dispatch synthetic events so Streamlit's React frontend registers the values.
+components.html(
+    '''
+    <script>
+        const syncStreamlitInputs = (forceBlur, skipActive) => {
+            const doc = window.parent.document;
+            const inputs = doc.querySelectorAll('input, textarea, select');
+            let hasChanges = false;
+            
+            inputs.forEach(input => {
+                if (skipActive && input === doc.activeElement) {
+                    return;
+                }
+
+                const val = input.value;
+                const lastVal = input.getAttribute('data-last-synced') || '';
+                
+                if (val !== lastVal) {
+                    input.setAttribute('data-last-synced', val);
+                    hasChanges = true;
+                    
+                    const EventConstructor = window.parent.Event;
+                    const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.parent.HTMLInputElement.prototype, 'value');
+                    const nativeTextAreaValueSetter = Object.getOwnPropertyDescriptor(window.parent.HTMLTextAreaElement.prototype, 'value');
+                    
+                    if (input.tagName === 'INPUT' && nativeInputValueSetter && nativeInputValueSetter.set) {
+                        nativeInputValueSetter.set.call(input, val);
+                    } else if (input.tagName === 'TEXTAREA' && nativeTextAreaValueSetter && nativeTextAreaValueSetter.set) {
+                        nativeTextAreaValueSetter.set.call(input, val);
+                    }
+                    
+                    input.dispatchEvent(new EventConstructor('input', { bubbles: true }));
+                    input.dispatchEvent(new EventConstructor('change', { bubbles: true }));
+                    input.dispatchEvent(new EventConstructor('blur', { bubbles: true }));
+                }
+            });
+
+            if (forceBlur) {
+                const active = doc.activeElement;
+                if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT')) {
+                    active.blur();
+                }
+            }
+            return hasChanges;
+        };
+
+        const checkIfInputsHaveChanges = () => {
+            const doc = window.parent.document;
+            const inputs = doc.querySelectorAll('input, textarea, select');
+            for (let input of inputs) {
+                const val = input.value;
+                const lastVal = input.getAttribute('data-last-synced') || '';
+                if (val !== lastVal) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        // Always update the sync references on the parent window to point to the active iframe
+        window.parent._syncStreamlitInputsNow = syncStreamlitInputs;
+        window.parent._checkIfInputsHaveChanges = checkIfInputsHaveChanges;
+
+        if (!window.parent._autofillInterval) {
+            let lastSync = 0;
+            const syncLoop = (now) => {
+                if (now - lastSync > 200) {
+                    if (window.parent._syncStreamlitInputsNow) {
+                        window.parent._syncStreamlitInputsNow(false, true);
+                    }
+                    lastSync = now;
+                }
+                window.parent.requestAnimationFrame(syncLoop);
+            };
+            window.parent.requestAnimationFrame(syncLoop);
+            window.parent._autofillInterval = true;
+            
+            window.parent.document.addEventListener('click', (e) => {
+                const target = e.target.closest('button, [role="button"], [role="option"], [role="tab"], [data-testid="stSegmentedControlItem"], [data-testid="stSidebarNavLink"], label');
+                if (target) {
+                    let hasChanges = false;
+                    if (window.parent._checkIfInputsHaveChanges) {
+                        hasChanges = window.parent._checkIfInputsHaveChanges();
+                    }
+                    
+                    if (hasChanges && !target.hasAttribute('data-sync-delayed')) {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        
+                        if (window.parent._syncStreamlitInputsNow) {
+                            window.parent._syncStreamlitInputsNow(true, false);
+                        }
+                        
+                        const savedText = target.textContent;
+                        const savedTestId = target.getAttribute('data-testid');
+                        
+                        window.parent.setTimeout(() => {
+                            const doc = window.parent.document;
+                            let found = null;
+                            const selector = 'button, [role="button"], [role="option"], [role="tab"], [data-testid="stSegmentedControlItem"], [data-testid="stSidebarNavLink"], label';
+                            const elements = doc.querySelectorAll(selector);
+                            for (let el of elements) {
+                                if (el.textContent === savedText) {
+                                    found = el;
+                                    break;
+                                }
+                            }
+                            if (!found && savedTestId) {
+                                found = doc.querySelector(`[data-testid="${savedTestId}"]`);
+                            }
+                            if (!found) {
+                                found = target;
+                            }
+                            found.setAttribute('data-sync-delayed', 'true');
+                            found.click();
+                            found.removeAttribute('data-sync-delayed');
+                        }, 400);
+                    }
+                }
+            }, true);
+        }
+    </script>
+    ''',
+    height=0,
+    width=0
+)
+
 st.write("กรุณาทำแบบสำรวจความพร้อมเบื้องต้นของโครงการวิจัยและพัฒนา เพื่อพิจารณาความเหมาะสมในการประเมินมูลค่า Pre-Impact / Pre-Investment")
 
-# Track Checklist State locally in session state
+# Track Checklist State locally in session state, checking persistent shadow keys first
 if "chk_a1" not in st.session_state:
-    st.session_state.chk_a1 = False
+    st.session_state.chk_a1 = st.session_state.get("_p_chk_a1", False)
 if "chk_a2" not in st.session_state:
-    st.session_state.chk_a2 = False
+    st.session_state.chk_a2 = st.session_state.get("_p_chk_a2", False)
 if "chk_b1" not in st.session_state:
-    st.session_state.chk_b1 = False
+    st.session_state.chk_b1 = st.session_state.get("_p_chk_b1", False)
 if "chk_b2" not in st.session_state:
-    st.session_state.chk_b2 = False
+    st.session_state.chk_b2 = st.session_state.get("_p_chk_b2", False)
 if "chk_b3" not in st.session_state:
-    st.session_state.chk_b3 = False
+    st.session_state.chk_b3 = st.session_state.get("_p_chk_b3", False)
 if "chk_b4" not in st.session_state:
-    st.session_state.chk_b4 = False
+    st.session_state.chk_b4 = st.session_state.get("_p_chk_b4", False)
 if "chk_b5" not in st.session_state:
-    st.session_state.chk_b5 = False
+    st.session_state.chk_b5 = st.session_state.get("_p_chk_b5", False)
 if "chk_b5_text" not in st.session_state:
-    st.session_state.chk_b5_text = ""
+    st.session_state.chk_b5_text = st.session_state.get("_p_chk_b5_text", "")
 
 # Section 1: หลักเกณฑ์เบื้องต้น
 st.markdown("### 1. หลักเกณฑ์เบื้องต้น (Basic Criteria)")

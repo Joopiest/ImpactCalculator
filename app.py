@@ -82,8 +82,22 @@ components.html(
             return hasChanges;
         };
 
-        // Always update the sync reference on the parent window to point to the active iframe
+        const checkIfInputsHaveChanges = () => {
+            const doc = window.parent.document;
+            const inputs = doc.querySelectorAll('input, textarea, select');
+            for (let input of inputs) {
+                const val = input.value;
+                const lastVal = input.getAttribute('data-last-synced') || '';
+                if (val !== lastVal) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        // Always update the sync references on the parent window to point to the active iframe
         window.parent._syncStreamlitInputsNow = syncStreamlitInputs;
+        window.parent._checkIfInputsHaveChanges = checkIfInputsHaveChanges;
 
         if (!window.parent._autofillInterval) {
             let lastSync = 0;
@@ -102,31 +116,15 @@ components.html(
             window.parent.document.addEventListener('click', (e) => {
                 const target = e.target.closest('button, [role="button"], [role="option"], [role="tab"], [data-testid="stSegmentedControlItem"], [data-testid="stSidebarNavLink"], label');
                 if (target) {
-                    const btnText = target.textContent || '';
-                    const isNavBtn = btnText.includes('Next') || 
-                                      btnText.includes('Back') || 
-                                      btnText.includes('ขั้นตอนถัดไป') || 
-                                      btnText.includes('ย้อนกลับ') || 
-                                      btnText.includes('บันทึก') || 
-                                      btnText.includes('เซฟ') || 
-                                      btnText.includes('Save') || 
-                                      btnText.includes('Details') || 
-                                      btnText.includes('Pre-Impact') || 
-                                      btnText.includes('Pre-Investment') || 
-                                      btnText.includes('Summary') || 
-                                      btnText.includes('Submit') || 
-                                      btnText.includes('Drafts') || 
-                                      btnText.includes('โหลด') || 
-                                      btnText.includes('Load') ||
-                                      btnText.includes('เข้าสู่ระบบ') ||
-                                      btnText.includes('ข้อมูลโครงการ') ||
-                                      btnText.includes('ประเมิน') ||
-                                      btnText.includes('สถิติ') ||
-                                      btnText.includes('Dashboard') ||
-                                      btnText.includes('ส่งรายงาน');
-                    if (isNavBtn && !target.hasAttribute('data-sync-delayed')) {
+                    let hasChanges = false;
+                    if (window.parent._checkIfInputsHaveChanges) {
+                        hasChanges = window.parent._checkIfInputsHaveChanges();
+                    }
+                    
+                    if (hasChanges && !target.hasAttribute('data-sync-delayed')) {
                         e.stopPropagation();
                         e.preventDefault();
+                        
                         if (window.parent._syncStreamlitInputsNow) {
                             window.parent._syncStreamlitInputsNow(true, false);
                         }
@@ -225,7 +223,7 @@ else:
         <span style="font-size: 0.8rem; color: #94a3b8;">ผู้เข้าใช้งาน (User):</span>
         <div style="font-weight: 800; font-size: 1.1rem; color: #818cf8; margin-top: 0.25rem;">👤 {st.session_state.employee_id}</div>
         <div style="font-size: 0.9rem; color: #06b6d4; margin-top: 0.25rem; font-weight: 500;">🏢 สังกัด: {st.session_state.organization}</div>
-        <div style="font-size: 0.75rem; color: #a1a1aa; margin-top: 0.5rem; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 0.25rem;">🕒 แก้ไขล่าสุด: 23 พ.ค. 2026 - 22:46 น.</div>
+        <div style="font-size: 0.75rem; color: #a1a1aa; margin-top: 0.5rem; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 0.25rem;">🕒 แก้ไขล่าสุด: 23 พ.ค. 2026 - 23:01 น.</div>
     </div>
     """, unsafe_allow_html=True)
     
@@ -285,8 +283,8 @@ else:
                     st.session_state.meta_patent_id    = meta_patent_id
                     
                     # Set checklist keys so user is not blocked and checklist shows passed
-                    st.session_state.checklist_passed = True
-                    st.session_state.checklist_data = {
+                    st.session_state.checklist_passed = item_data.get("checklist_passed", True)
+                    st.session_state.checklist_data = item_data.get("checklist_data", {
                         "chk_a1": True,
                         "chk_a2": False,
                         "chk_b1": True,
@@ -295,15 +293,26 @@ else:
                         "chk_b4": False,
                         "chk_b5": False,
                         "chk_b5_text": ""
-                    }
-                    st.session_state.chk_a1 = True
-                    st.session_state.chk_a2 = False
-                    st.session_state.chk_b1 = True
-                    st.session_state.chk_b2 = False
-                    st.session_state.chk_b3 = False
-                    st.session_state.chk_b4 = False
-                    st.session_state.chk_b5 = False
-                    st.session_state.chk_b5_text = ""
+                    })
+                    chk_data = st.session_state.checklist_data
+                    st.session_state.chk_a1 = chk_data.get("chk_a1", True)
+                    st.session_state.chk_a2 = chk_data.get("chk_a2", False)
+                    st.session_state.chk_b1 = chk_data.get("chk_b1", True)
+                    st.session_state.chk_b2 = chk_data.get("chk_b2", False)
+                    st.session_state.chk_b3 = chk_data.get("chk_b3", False)
+                    st.session_state.chk_b4 = chk_data.get("chk_b4", False)
+                    st.session_state.chk_b5 = chk_data.get("chk_b5", False)
+                    st.session_state.chk_b5_text = chk_data.get("chk_b5_text", "")
+                    
+                    # Store them also in persistent shadow keys so pages/checklist.py reads them correctly
+                    st.session_state._p_chk_a1 = st.session_state.chk_a1
+                    st.session_state._p_chk_a2 = st.session_state.chk_a2
+                    st.session_state._p_chk_b1 = st.session_state.chk_b1
+                    st.session_state._p_chk_b2 = st.session_state.chk_b2
+                    st.session_state._p_chk_b3 = st.session_state.chk_b3
+                    st.session_state._p_chk_b4 = st.session_state.chk_b4
+                    st.session_state._p_chk_b5 = st.session_state.chk_b5
+                    st.session_state._p_chk_b5_text = st.session_state.chk_b5_text
                     
                     # Set widget keys to prevent race conditions on next rerun
                     st.session_state["wid_projectId"]   = proj_id

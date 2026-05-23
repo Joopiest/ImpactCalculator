@@ -96,3 +96,31 @@ Streamlit is single-threaded per session. When multiple events are queued (e.g. 
 ### 🛠️ Solution: "Retrieve to Overwrite" Workflow
 *   **Conflict Detection:** Check Firestore when a Project ID is entered.
 *   **State Alignment:** Conflict resolution buttons ("Load Draft", "Delete & Start Fresh", "Retrieve to Overwrite") must explicitly set the `_cloud_loaded_{projectId} = True` flag in their callbacks to align states and enable autosave.
+
+---
+
+## 5. Problem: Checklist Lockout after Refresh / Switching Pages
+### 🔍 Root Cause
+1.  **Page Switch Reset:** Checklist checkbox variables (`chk_a1` through `chk_b5_text`) were initialized to defaults (`False` / `""`) on every load of `pages/checklist.py` without attempting to read from shadow keys.
+2.  **No Firestore Backup:** Checklist state was excluded from the Firestore draft object, causing it to be lost upon page refresh. Once refreshed, the checklist was treated as not passed, locking the user out of the Calculator page.
+
+### 🛠️ Solution: Checklist State Mapping & Shadow Sync
+*   **Firestore Mapping:** Save `"checklist_passed"` and `"checklist_data"` keys in the Firestore draft.
+*   **Checklist Page Shadow Restore:** Initialize checklist variables in `pages/checklist.py` using shadow keys:
+    ```python
+    if "chk_a1" not in st.session_state:
+        st.session_state.chk_a1 = st.session_state.get("_p_chk_a1", False)
+    ```
+*   **Cloud Load Restoration:** Update `cloud_load_on_startup()` in the calculator page and history loading in `app.py` to restore both active checklist widget keys and shadow backup keys.
+
+---
+
+## 6. Optimization: Intelligent Click-Trap Event Interception
+### 🔍 Root Cause
+Unconditional 450ms click delay applied to all buttons matching the `isNavBtn` regex. This caused annoying delays for normal navigation when no inputs had changed, yet missed non-matching buttons or checkbox interactions, resulting in race conditions.
+
+### 🛠️ Solution: Conditional Click-Trap Interception
+*   **State Change Checker:** Add a lightweight helper `checkIfInputsHaveChanges()` that compares current input values against `data-last-synced` in the DOM without mutative side-effects.
+*   **Zero-Delay Default Navigation:** If no unsynced changes are detected, allow clicks to proceed instantly.
+*   **Targeted Interception:** If changes exist, stop propagation, prevent default, trigger a full React sync/blur, and click the element after 450ms.
+
