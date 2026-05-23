@@ -5,18 +5,20 @@ import firebase_config
 from datetime import datetime
 
 # EARLY STATE BACKUP: Prevent Streamlit data loss from unmounted widgets!
-# Streamlit deletes unmounted widgets at the end of a rerun.
-# If a widget update (like a blur event) arrives in a rerun where the widget isn't rendered
-# (e.g., during a tab switch), we MUST capture it before Streamlit deletes it!
-for _k, _v in list(st.session_state.items()):
-    if _k.startswith("val_") or _k.startswith("chk_"):
-        st.session_state[f"_p_{_k}"] = _v
-    elif _k.startswith("wid_"):
-        val = _v
-        if _k == "wid_projectId" and isinstance(val, str):
-            val = val.upper()
-            st.session_state[_k] = val
-        st.session_state[_k[4:]] = val
+def force_sync_to_shadow():
+    """Manually sync all current widget values to their persistent shadow keys."""
+    for _k, _v in list(st.session_state.items()):
+        if _k.startswith("val_") or _k.startswith("chk_"):
+            st.session_state[f"_p_{_k}"] = _v
+        elif _k.startswith("wid_"):
+            field_name = _k[4:]
+            val = _v
+            if field_name == "projectId" and isinstance(val, str):
+                val = val.upper()
+            st.session_state[field_name] = val
+
+# Run sync at the very beginning of every rerun
+force_sync_to_shadow()
 
 # Fallback initialization in case user navigates here directly, bypassing app.py
 if "authenticated" not in st.session_state:
@@ -34,6 +36,14 @@ if not st.session_state.authenticated:
     st.warning("⚠️ กรุณาเข้าสู่ระบบผ่านหน้าหลักก่อนเข้าใช้งาน")
     st.stop()
 
+# Hidden button for JS to trigger a clean sync/rerun
+if st.button("SYNC_TRIGGER", key="js_sync_trigger", help="Internal use only"):
+    force_sync_to_shadow()
+    st.rerun()
+
+# CSS to hide the internal trigger button
+st.markdown("<style>div[data-testid='stButton'] button:has(div:contains('SYNC_TRIGGER')) { display: none; }</style>", unsafe_allow_html=True)
+
 # Inject background JavaScript to automatically detect browser autofill on input fields
 # and dispatch synthetic events so Streamlit's React frontend registers the values.
 components.html(
@@ -43,19 +53,19 @@ components.html(
             const syncStreamlitInputs = (forceBlur, skipActive) => {
                 const doc = window.parent.document;
                 const inputs = doc.querySelectorAll('input, textarea, select');
+                let hasChanges = false;
                 
                 inputs.forEach(input => {
                     if (skipActive && input === doc.activeElement) {
                         return;
                     }
 
-                    // Check for value presence or autofill state
                     const val = input.value;
                     const lastVal = input.getAttribute('data-last-synced') || '';
                     
-                    // If the value has changed (even via autofill), trigger Streamlit's React sync
                     if (val !== lastVal) {
                         input.setAttribute('data-last-synced', val);
+                        hasChanges = true;
                         
                         // React 15/16+ Value Setter Override
                         const prototype = Object.getPrototypeOf(input);
@@ -64,7 +74,6 @@ components.html(
                             descriptor.set.call(input, val);
                         }
                         
-                        // Dispatch multiple events to ensure React and Streamlit see the change
                         input.dispatchEvent(new Event('input', { bubbles: true }));
                         input.dispatchEvent(new Event('change', { bubbles: true }));
                     }
@@ -76,14 +85,15 @@ components.html(
                         active.blur();
                     }
                 }
+                return hasChanges;
             };
             
             window.parent._syncStreamlitInputsNow = syncStreamlitInputs;
             
-            // Aggressive sync loop for autofill
+            // Sync loop
             let lastSync = 0;
             const syncLoop = (now) => {
-                if (now - lastSync > 150) { // Faster sync (150ms)
+                if (now - lastSync > 150) { 
                     syncStreamlitInputs(false, true);
                     lastSync = now;
                 }
@@ -100,21 +110,29 @@ components.html(
                     const isNavBtn = /Next|Back|ขั้นตอนถัดไป|ย้อนกลับ|บันทึก|เซฟ|Save|Details|Pre-Impact|Pre-Investment|Summary|Submit|Drafts|โหลด|Load|ข้อมูลโครงการ|ประเมิน|สถิติ|Dashboard|ส่งรายงาน/i.test(btnText);
                     
                     if (isNavBtn && !target.hasAttribute('data-sync-delayed')) {
-                        e.preventDefault();
-                        e.stopPropagation();
+                        // Force a sync and potential trigger click
+                        const hadChanges = syncStreamlitInputs(true, false);
                         
-                        syncStreamlitInputs(true, false);
-                        
-                        target.setAttribute('data-sync-delayed', 'true');
-                        setTimeout(() => {
-                            target.click();
-                            target.removeAttribute('data-sync-delayed');
-                        }, 400); // Slightly longer delay for high-reliability sync
+                        if (hadChanges) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            
+                            // Find our hidden trigger button and click it to force a rerun
+                            const triggerBtn = doc.querySelector('button:has(div:contains("SYNC_TRIGGER"))');
+                            if (triggerBtn) {
+                                triggerBtn.click();
+                            }
+                            
+                            target.setAttribute('data-sync-delayed', 'true');
+                            setTimeout(() => {
+                                target.click();
+                                target.removeAttribute('data-sync-delayed');
+                            }, 500); 
+                        }
                     }
                 }
             }, true);
             
-            // Sync on mouse movement over buttons/tabs
             window.parent.document.addEventListener('mouseover', (e) => {
                 if (e.target.closest('button, [role="tab"], [data-testid="stSegmentedControlItem"]')) {
                     syncStreamlitInputs(false, true);
