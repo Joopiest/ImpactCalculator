@@ -5,33 +5,35 @@ import firebase_config
 from datetime import datetime
 
 # EARLY STATE BACKUP: Prevent Streamlit data loss from unmounted widgets!
-def force_sync_to_shadow():
-    """Manually sync all current widget values to their persistent shadow keys."""
-    # Create a snapshot of current keys to avoid 'dictionary changed size during iteration'
-    current_keys = list(st.session_state.keys())
-    for _k in current_keys:
-        _v = st.session_state[_k]
-        if _k.startswith("val_") or _k.startswith("chk_"):
-            st.session_state[f"_p_{_k}"] = _v
-        elif _k.startswith("wid_"):
-            field_name = _k[4:]
-            if field_name == "projectId" and isinstance(_v, str):
-                _v = _v.upper()
-                st.session_state[_k] = _v # Sync uppercase back to widget
-            st.session_state[field_name] = _v # Sync to non-widget key
+# Streamlit deletes unmounted widgets at the end of a rerun.
+# If a widget update (like a blur event) arrives in a rerun where the widget isn't rendered
+# (e.g., during a tab switch), we MUST capture it before Streamlit deletes it!
+for _k, _v in list(st.session_state.items()):
+    if _k.startswith("val_") or _k.startswith("chk_"):
+        st.session_state[f"_p_{_k}"] = _v
+    elif _k.startswith("wid_"):
+        field_name = _k[4:]
+        val = _v
+        if field_name == "projectId" and isinstance(val, str):
+            val = val.upper()
+            st.session_state[_k] = val
+        st.session_state[field_name] = val
 
-# Run sync at the very beginning of every rerun
-force_sync_to_shadow()
-
-# ... (Checklist/Auth blocks) ...
-
-# Hidden button for JS to trigger a clean sync/rerun
-if st.button("SYNC_TRIGGER", key="js_sync_trigger"):
-    force_sync_to_shadow()
-    st.rerun()
-
-# CSS to hide the internal trigger button
-st.markdown("<style>div[data-testid='stButton'] button:has(div:contains('SYNC_TRIGGER')) { display: none !important; }</style>", unsafe_allow_html=True)
+# Fallback initialization in case user navigates here directly, bypassing app.py
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+if "checklist_passed" not in st.session_state:
+    st.session_state.checklist_passed = False
+if "checklist_data" not in st.session_state:
+    st.session_state.checklist_data = {}
+if "employee_id" not in st.session_state:
+    st.session_state.employee_id = ""
+if "organization" not in st.session_state:
+    st.session_state.organization = ""
+    
+if not st.session_state.authenticated:
+    st.warning("⚠️ กรุณาเข้าสู่ระบบผ่านหน้าหลักก่อนเข้าใช้งาน")
+    st.stop()
 
 # Inject background JavaScript to automatically detect browser autofill on input fields
 # and dispatch synthetic events so Streamlit's React frontend registers the values.
@@ -56,10 +58,7 @@ components.html(
                         input.setAttribute('data-last-synced', val);
                         hasChanges = true;
                         
-                        // Use parent window constructors for cross-iframe compatibility
                         const EventConstructor = window.parent.Event;
-                        
-                        // React 15/16+ Value Setter Override (Stable version technique)
                         const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.parent.HTMLInputElement.prototype, 'value');
                         const nativeTextAreaValueSetter = Object.getOwnPropertyDescriptor(window.parent.HTMLTextAreaElement.prototype, 'value');
                         
@@ -69,7 +68,6 @@ components.html(
                             nativeTextAreaValueSetter.set.call(input, val);
                         }
                         
-                        // Dispatch all 3 events to ensure Streamlit's React listeners catch it
                         input.dispatchEvent(new EventConstructor('input', { bubbles: true }));
                         input.dispatchEvent(new EventConstructor('change', { bubbles: true }));
                         input.dispatchEvent(new EventConstructor('blur', { bubbles: true }));
@@ -87,7 +85,6 @@ components.html(
             
             window.parent._syncStreamlitInputsNow = syncStreamlitInputs;
             
-            // Sync loop
             let lastSync = 0;
             const syncLoop = (now) => {
                 if (now - lastSync > 200) { 
@@ -99,7 +96,6 @@ components.html(
             window.parent.requestAnimationFrame(syncLoop);
             window.parent._autofillInterval = true;
             
-            // Navigation click trap
             window.parent.document.addEventListener('click', (e) => {
                 const target = e.target.closest('button, [role="button"], [role="option"], [role="tab"], [data-testid="stSegmentedControlItem"], [data-testid="stSidebarNavLink"], label');
                 if (target) {
@@ -107,27 +103,12 @@ components.html(
                     const isNavBtn = /Next|Back|ขั้นตอนถัดไป|ย้อนกลับ|บันทึก|เซฟ|Save|Details|Pre-Impact|Pre-Investment|Summary|Submit|Drafts|โหลด|Load|ข้อมูลโครงการ|ประเมิน|สถิติ|Dashboard|ส่งรายงาน/i.test(btnText);
                     
                     if (isNavBtn && !target.hasAttribute('data-sync-delayed')) {
-                        const hadChanges = syncStreamlitInputs(true, false);
-                        
-                        if (hadChanges) {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            
-                            // Find our hidden trigger button and click it to force a rerun
-                            const buttons = doc.querySelectorAll('button');
-                            for (const btn of buttons) {
-                                if (btn.textContent.includes('SYNC_TRIGGER')) {
-                                    btn.click();
-                                    break;
-                                }
-                            }
-                            
-                            target.setAttribute('data-sync-delayed', 'true');
-                            setTimeout(() => {
-                                target.click();
-                                target.removeAttribute('data-sync-delayed');
-                            }, 450); 
-                        }
+                        syncStreamlitInputs(true, false);
+                        target.setAttribute('data-sync-delayed', 'true');
+                        window.parent.setTimeout(() => {
+                            target.click();
+                            target.removeAttribute('data-sync-delayed');
+                        }, 450); 
                     }
                 }
             }, true);
@@ -438,23 +419,31 @@ def _gm(field):
     return str(val).strip() if val is not None else ""
 
 def autosave_to_cloud(silent=False):
-    """Saves current state to Firestore synchronously, with protections for conflicting IDs."""
+    """
+    Saves current state to persistent shadow keys (Local) 
+    and Firestore (Cloud) synchronously.
+    """
+    # 1. ALWAYS sync all active widgets to local shadow keys first
+    # This ensures Tab switching works even if cloud is blocked
+    for _k, _v in list(st.session_state.items()):
+        if _k.startswith("val_") or _k.startswith("chk_"):
+            st.session_state[f"_p_{_k}"] = _v
+
+    # 2. Guarded Cloud Save
     if firebase_config.is_db_connected():
         proj_id = st.session_state.get("projectId", "").strip()
         emp_id = st.session_state.get("employee_id", "").strip()
+        
         if proj_id and emp_id:
-            # Safety checks: do not autosave if the project has a conflict (draft/evaluation exists)
-            # and the user has not resolved it by choosing to load/delete/overwrite yet.
-            if not st.session_state.get(f"_cloud_loaded_{proj_id}", False):
-                return
-                
-            payload = get_current_state_payload()
-            success = firebase_config.save_draft(emp_id, proj_id, payload)
-            if not silent:
-                if success:
-                    st.toast(f"☁️ บันทึกข้อมูล '{proj_id}' สำเร็จ")
-                else:
-                    st.toast("⚠️ ไม่สามารถบันทึก Cloud ได้")
+            # Only send to Firestore if the project is "aligned" (loaded/cleared)
+            if st.session_state.get(f"_cloud_loaded_{proj_id}", False):
+                payload = get_current_state_payload()
+                success = firebase_config.save_draft(emp_id, proj_id, payload)
+                if not silent:
+                    if success:
+                        st.toast(f"☁️ บันทึก Cloud '{proj_id}' สำเร็จ")
+                    else:
+                        st.toast("⚠️ ไม่สามารถบันทึก Cloud ได้")
 
 
 
