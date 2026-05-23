@@ -583,14 +583,18 @@ results = compute_results()
 # ==================== TAB 1: PROJECT DETAILS ====================
 if st.session_state.active_calc_tab == TABS_LIST[0]:
     st.markdown("### 📋 กรอกข้อมูลรายละเอียดโครงการ")
+    proj_id = st.session_state.get("projectId", "").strip()
     st.text_input(
         "รหัสโครงการ (Project ID) 👉 [กรอกข้อมูล]",
-        
         value=st.session_state.get("projectId", ""), key="wid_projectId",
         on_change=sync_project_meta,
         placeholder="เช่น P-20-XXXXX",
         help="รหัสอ้างอิงโครงการที่จดทะเบียนของหน่วยงาน"
     )
+    if proj_id and firebase_config.is_db_connected():
+        dup_eval = firebase_config.check_project_submitted(proj_id)
+        if dup_eval:
+            st.warning(f"⚠️ **หมายเหตุ:** รหัสโครงการนี้เคยมีการยื่นส่งรายงานประเมินในระบบแล้วโดยคุณ **{dup_eval.get('employee_id', '-')}** ({dup_eval.get('organization', '-')}) เมื่อ {dup_eval.get('submitted_at_str', '-')}")
     st.text_input(
         "ชื่อโครงการ (Project Name) 👉 [กรอกข้อมูล]",
         
@@ -1101,9 +1105,21 @@ elif st.session_state.active_calc_tab == TABS_LIST[4]:
     st.markdown("---")
     st.markdown("#### 📤 ยื่นส่งรายงานประเมินผลโครงการ")
     
+    p_id_final = st.session_state.get("projectId", "").strip()
+    dup_eval = None
+    if firebase_config.is_db_connected() and p_id_final:
+        dup_eval = firebase_config.check_project_submitted(p_id_final)
+        if dup_eval:
+            st.warning(f"⚠️ **โครงการนี้ได้รับการประเมินแล้ว:** รหัสโครงการ **{p_id_final}** เคยถูกส่งรายงานประเมินโดยคุณ **{dup_eval.get('employee_id', '-')}** ({dup_eval.get('organization', '-')}) เมื่อ {dup_eval.get('submitted_at_str', '-')}")
+            st.checkbox("ฉันยืนยันที่จะยื่นส่งรายงานประเมินของรหัสโครงการนี้ซ้ำอีกครั้ง (ระบบจะบันทึกเป็นรายการใหม่)", key="confirm_dup_submit")
+            
     submit_clicked = st.button("📤 ส่งและพิมพ์รายงานการประเมิน (Submit & Print)", type="primary", use_container_width=True)
     
     if submit_clicked:
+        if dup_eval and not st.session_state.get("confirm_dup_submit", False):
+            st.error("❌ กรุณาติ๊กถูกที่ช่อง 'ยืนยันที่จะยื่นส่งรายงานประเมินซ้ำ' ก่อนกดส่งรายงาน")
+            st.stop()
+            
         if not st.session_state.checklist_passed:
             st.error("❌ ท่านจำเป็นต้องประเมินความพร้อมแบบ Checklist ให้ผ่านเกณฑ์ก่อนส่งรายงาน")
             st.stop()

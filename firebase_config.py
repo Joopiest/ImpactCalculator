@@ -240,3 +240,30 @@ def get_dashboard_stats():
     except Exception as e:
         print(f"Firestore get_dashboard_stats critical error: {e}")
         return None
+
+def check_project_submitted(project_id):
+    """
+    Checks if a project ID has already been submitted in evaluations
+    Returns the document data dict if found, or None
+    """
+    if not db:
+        return None
+    try:
+        docs = db.collection("evaluations").where("project_id", "==", project_id).limit(1).stream()
+        for doc in docs:
+            d = doc.to_dict()
+            if "submitted_at" in d and d["submitted_at"]:
+                try:
+                    dt = d["submitted_at"]
+                    if hasattr(dt, "to_datetime"):
+                        dt = dt.to_datetime()
+                    d["submitted_at_str"] = dt.strftime("%Y-%m-%d %H:%M:%S")
+                except Exception:
+                    d["submitted_at_str"] = str(d["submitted_at"])
+            else:
+                d["submitted_at_str"] = "-"
+            return d
+        return None
+    except Exception as e:
+        print(f"Firestore check_project_submitted error: {e}")
+        return None
