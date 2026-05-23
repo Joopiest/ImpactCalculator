@@ -41,43 +41,49 @@ components.html(
     <script>
         if (!window.parent._autofillInterval) {
             const syncStreamlitInputs = (forceBlur, skipActive) => {
+                const doc = window.parent.document;
+                const inputs = doc.querySelectorAll('input, textarea, select');
+                
+                inputs.forEach(input => {
+                    if (skipActive && input === doc.activeElement) {
+                        return;
+                    }
+
+                    // Check for value presence or autofill state
+                    const val = input.value;
+                    const lastVal = input.getAttribute('data-last-synced') || '';
+                    
+                    // If the value has changed (even via autofill), trigger Streamlit's React sync
+                    if (val !== lastVal) {
+                        input.setAttribute('data-last-synced', val);
+                        
+                        // React 15/16+ Value Setter Override
+                        const prototype = Object.getPrototypeOf(input);
+                        const descriptor = Object.getOwnPropertyDescriptor(prototype, 'value');
+                        if (descriptor && descriptor.set) {
+                            descriptor.set.call(input, val);
+                        }
+                        
+                        // Dispatch multiple events to ensure React and Streamlit see the change
+                        input.dispatchEvent(new Event('input', { bubbles: true }));
+                        input.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                });
+
                 if (forceBlur) {
-                    const active = window.parent.document.activeElement;
+                    const active = doc.activeElement;
                     if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT')) {
                         active.blur();
                     }
                 }
-                const inputs = window.parent.document.querySelectorAll('input, textarea, select');
-                inputs.forEach(input => {
-                    if (skipActive && input === window.parent.document.activeElement) {
-                        return;
-                    }
-                    if (input.value !== undefined && input.value !== null) {
-                        const lastVal = input.getAttribute('data-last-synced') || '';
-                        if (input.value !== lastVal) {
-                            input.setAttribute('data-last-synced', input.value);
-                            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.parent.HTMLInputElement.prototype, 'value');
-                            if (nativeInputValueSetter && nativeInputValueSetter.set && input.tagName === 'INPUT' && input.type !== 'checkbox' && input.type !== 'radio') {
-                                nativeInputValueSetter.set.call(input, input.value);
-                            } else if (input.tagName === 'TEXTAREA') {
-                                const nativeTextAreaValueSetter = Object.getOwnPropertyDescriptor(window.parent.HTMLTextAreaElement.prototype, 'value');
-                                if (nativeTextAreaValueSetter && nativeTextAreaValueSetter.set) {
-                                    nativeTextAreaValueSetter.set.call(input, input.value);
-                                }
-                            }
-                            input.dispatchEvent(new window.parent.Event('input', { bubbles: true }));
-                            input.dispatchEvent(new window.parent.Event('change', { bubbles: true }));
-                            input.dispatchEvent(new window.parent.Event('blur', { bubbles: true }));
-                        }
-                    }
-                });
             };
+            
             window.parent._syncStreamlitInputsNow = syncStreamlitInputs;
             
-            // Faster sync loop using requestAnimationFrame
+            // Aggressive sync loop for autofill
             let lastSync = 0;
             const syncLoop = (now) => {
-                if (now - lastSync > 200) {
+                if (now - lastSync > 150) { // Faster sync (150ms)
                     syncStreamlitInputs(false, true);
                     lastSync = now;
                 }
@@ -86,56 +92,31 @@ components.html(
             window.parent.requestAnimationFrame(syncLoop);
             window.parent._autofillInterval = true;
             
+            // Navigation click trap
             window.parent.document.addEventListener('click', (e) => {
                 const target = e.target.closest('button, [role="button"], [role="option"], [role="tab"], [data-testid="stSegmentedControlItem"], [data-testid="stSidebarNavLink"], label');
                 if (target) {
-                    const btnText = target.textContent || '';
-                    const isNavBtn = btnText.includes('Next') || 
-                                      btnText.includes('Back') || 
-                                      btnText.includes('ขั้นตอนถัดไป') || 
-                                      btnText.includes('ย้อนกลับ') || 
-                                      btnText.includes('บันทึก') || 
-                                      btnText.includes('เซฟ') || 
-                                      btnText.includes('Save') || 
-                                      btnText.includes('Details') || 
-                                      btnText.includes('Pre-Impact') || 
-                                      btnText.includes('Pre-Investment') || 
-                                      btnText.includes('Summary') || 
-                                      btnText.includes('Submit') || 
-                                      btnText.includes('Drafts') || 
-                                      btnText.includes('โหลด') || 
-                                      btnText.includes('Load') ||
-                                      btnText.includes('ข้อมูลโครงการ') ||
-                                      btnText.includes('ประเมิน') ||
-                                      btnText.includes('สถิติ') ||
-                                      btnText.includes('Dashboard') ||
-                                      btnText.includes('ส่งรายงาน');
+                    const btnText = (target.textContent || '').trim();
+                    const isNavBtn = /Next|Back|ขั้นตอนถัดไป|ย้อนกลับ|บันทึก|เซฟ|Save|Details|Pre-Impact|Pre-Investment|Summary|Submit|Drafts|โหลด|Load|ข้อมูลโครงการ|ประเมิน|สถิติ|Dashboard|ส่งรายงาน/i.test(btnText);
+                    
                     if (isNavBtn && !target.hasAttribute('data-sync-delayed')) {
                         e.preventDefault();
                         e.stopPropagation();
-                        const active = window.parent.document.activeElement;
-                        if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT')) {
-                            active.blur();
-                        }
+                        
                         syncStreamlitInputs(true, false);
+                        
                         target.setAttribute('data-sync-delayed', 'true');
-                        window.parent.setTimeout(() => {
+                        setTimeout(() => {
                             target.click();
                             target.removeAttribute('data-sync-delayed');
-                        }, 350); // Increased delay for better sync reliability
+                        }, 400); // Slightly longer delay for high-reliability sync
                     }
                 }
             }, true);
             
+            // Sync on mouse movement over buttons/tabs
             window.parent.document.addEventListener('mouseover', (e) => {
-                const target = e.target.closest('button, [role="button"], [role="option"], [role="tab"], [data-testid="stSegmentedControlItem"], label');
-                if (target) {
-                    syncStreamlitInputs(false, true);
-                }
-            });
-            
-            window.parent.document.addEventListener('focusin', (e) => {
-                if (e.target.tagName === 'BUTTON' || e.target.role === 'tab') {
+                if (e.target.closest('button, [role="tab"], [data-testid="stSegmentedControlItem"]')) {
                     syncStreamlitInputs(false, true);
                 }
             });
