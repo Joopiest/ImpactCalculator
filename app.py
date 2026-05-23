@@ -34,6 +34,118 @@ def load_css():
 
 load_css()
 
+# Inject background JavaScript to automatically detect browser autofill on input fields
+# and dispatch synthetic events so Streamlit's React frontend registers the values.
+components.html(
+    '''
+    <script>
+        if (!window.parent._autofillInterval) {
+            const syncStreamlitInputs = (forceBlur, skipActive) => {
+                if (forceBlur) {
+                    const active = window.parent.document.activeElement;
+                    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT')) {
+                        active.blur();
+                    }
+                }
+                const inputs = window.parent.document.querySelectorAll('input, textarea, select');
+                inputs.forEach(input => {
+                    if (skipActive && input === window.parent.document.activeElement) {
+                        return;
+                    }
+                    if (input.value !== undefined && input.value !== null) {
+                        const lastVal = input.getAttribute('data-last-synced') || '';
+                        if (input.value !== lastVal) {
+                            input.setAttribute('data-last-synced', input.value);
+                            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.parent.HTMLInputElement.prototype, 'value');
+                            if (nativeInputValueSetter && nativeInputValueSetter.set && input.tagName === 'INPUT' && input.type !== 'checkbox' && input.type !== 'radio') {
+                                nativeInputValueSetter.set.call(input, input.value);
+                            } else if (input.tagName === 'TEXTAREA') {
+                                const nativeTextAreaValueSetter = Object.getOwnPropertyDescriptor(window.parent.HTMLTextAreaElement.prototype, 'value');
+                                if (nativeTextAreaValueSetter && nativeTextAreaValueSetter.set) {
+                                    nativeTextAreaValueSetter.set.call(input, input.value);
+                                }
+                            }
+                            input.dispatchEvent(new window.parent.Event('input', { bubbles: true }));
+                            input.dispatchEvent(new window.parent.Event('change', { bubbles: true }));
+                            input.dispatchEvent(new window.parent.Event('blur', { bubbles: true }));
+                        }
+                    }
+                });
+            };
+            window.parent._syncStreamlitInputsNow = syncStreamlitInputs;
+            
+            let lastSync = 0;
+            const syncLoop = (now) => {
+                if (now - lastSync > 200) {
+                    syncStreamlitInputs(false, true);
+                    lastSync = now;
+                }
+                window.parent.requestAnimationFrame(syncLoop);
+            };
+            window.parent.requestAnimationFrame(syncLoop);
+            window.parent._autofillInterval = true;
+            
+            window.parent.document.addEventListener('click', (e) => {
+                const target = e.target.closest('button, [role="button"], [role="option"], [role="tab"], [data-testid="stSegmentedControlItem"], [data-testid="stSidebarNavLink"], label');
+                if (target) {
+                    const btnText = target.textContent || '';
+                    const isNavBtn = btnText.includes('Next') || 
+                                      btnText.includes('Back') || 
+                                      btnText.includes('ขั้นตอนถัดไป') || 
+                                      btnText.includes('ย้อนกลับ') || 
+                                      btnText.includes('บันทึก') || 
+                                      btnText.includes('เซฟ') || 
+                                      btnText.includes('Save') || 
+                                      btnText.includes('Details') || 
+                                      btnText.includes('Pre-Impact') || 
+                                      btnText.includes('Pre-Investment') || 
+                                      btnText.includes('Summary') || 
+                                      btnText.includes('Submit') || 
+                                      btnText.includes('Drafts') || 
+                                      btnText.includes('โหลด') || 
+                                      btnText.includes('Load') ||
+                                      btnText.includes('เข้าสู่ระบบ') ||
+                                      btnText.includes('ข้อมูลโครงการ') ||
+                                      btnText.includes('ประเมิน') ||
+                                      btnText.includes('สถิติ') ||
+                                      btnText.includes('Dashboard') ||
+                                      btnText.includes('ส่งรายงาน');
+                    if (isNavBtn && !target.hasAttribute('data-sync-delayed')) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const active = window.parent.document.activeElement;
+                        if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT')) {
+                            active.blur();
+                        }
+                        syncStreamlitInputs(true, false);
+                        target.setAttribute('data-sync-delayed', 'true');
+                        window.parent.setTimeout(() => {
+                            target.click();
+                            target.removeAttribute('data-sync-delayed');
+                        }, 350);
+                    }
+                }
+            }, true);
+            
+            window.parent.document.addEventListener('mouseover', (e) => {
+                const target = e.target.closest('button, [role="button"], [role="option"], [role="tab"], [data-testid="stSegmentedControlItem"], label');
+                if (target) {
+                    syncStreamlitInputs(false, true);
+                }
+            });
+            
+            window.parent.document.addEventListener('focusin', (e) => {
+                if (e.target.tagName === 'BUTTON' || e.target.role === 'tab') {
+                    syncStreamlitInputs(false, true);
+                }
+            });
+        }
+    </script>
+    ''',
+    height=0,
+    width=0
+)
+
 # 4. Auth Gate
 if not st.session_state.authenticated:
     # Hide sidebar completely on login page

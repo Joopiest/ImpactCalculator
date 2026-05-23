@@ -73,10 +73,21 @@ components.html(
                 });
             };
             window.parent._syncStreamlitInputsNow = syncStreamlitInputs;
-            window.parent._autofillInterval = window.parent.setInterval(() => syncStreamlitInputs(false, true), 300);
+            
+            // Faster sync loop using requestAnimationFrame
+            let lastSync = 0;
+            const syncLoop = (now) => {
+                if (now - lastSync > 200) {
+                    syncStreamlitInputs(false, true);
+                    lastSync = now;
+                }
+                window.parent.requestAnimationFrame(syncLoop);
+            };
+            window.parent.requestAnimationFrame(syncLoop);
+            window.parent._autofillInterval = true;
             
             window.parent.document.addEventListener('click', (e) => {
-                const target = e.target.closest('button, [role="button"], [role="option"], [role="tab"], [data-testid="stSegmentedControlItem"], label');
+                const target = e.target.closest('button, [role="button"], [role="option"], [role="tab"], [data-testid="stSegmentedControlItem"], [data-testid="stSidebarNavLink"], label');
                 if (target) {
                     const btnText = target.textContent || '';
                     const isNavBtn = btnText.includes('Next') || 
@@ -95,6 +106,9 @@ components.html(
                                       btnText.includes('โหลด') || 
                                       btnText.includes('Load') ||
                                       btnText.includes('ข้อมูลโครงการ') ||
+                                      btnText.includes('ประเมิน') ||
+                                      btnText.includes('สถิติ') ||
+                                      btnText.includes('Dashboard') ||
                                       btnText.includes('ส่งรายงาน');
                     if (isNavBtn && !target.hasAttribute('data-sync-delayed')) {
                         e.preventDefault();
@@ -108,7 +122,7 @@ components.html(
                         window.parent.setTimeout(() => {
                             target.click();
                             target.removeAttribute('data-sync-delayed');
-                        }, 250);
+                        }, 350); // Increased delay for better sync reliability
                     }
                 }
             }, true);
@@ -116,6 +130,12 @@ components.html(
             window.parent.document.addEventListener('mouseover', (e) => {
                 const target = e.target.closest('button, [role="button"], [role="option"], [role="tab"], [data-testid="stSegmentedControlItem"], label');
                 if (target) {
+                    syncStreamlitInputs(false, true);
+                }
+            });
+            
+            window.parent.document.addEventListener('focusin', (e) => {
+                if (e.target.tagName === 'BUTTON' || e.target.role === 'tab') {
                     syncStreamlitInputs(false, true);
                 }
             });
