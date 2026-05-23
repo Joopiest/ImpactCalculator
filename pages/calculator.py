@@ -336,6 +336,21 @@ def cloud_load_on_startup(force=False):
                 st.session_state.meta_krid = d.get("meta_krid", st.session_state.get("meta_krid", ""))
                 st.session_state.meta_krrn_related = d.get("meta_krrn_related", st.session_state.get("meta_krrn_related", ""))
                 st.session_state.meta_patent_id = d.get("meta_patent_id", st.session_state.get("meta_patent_id", ""))
+                
+                # Update widget states so they show up on screen immediately
+                st.session_state["wid_projectName"] = d.get("project_name", "")
+                st.session_state["wid_reportType"] = d.get("report_type", "รายปี")
+                st.session_state["wid_meta_krrn"] = d.get("meta_krrn", "")
+                st.session_state["wid_meta_krid"] = d.get("meta_krid", "")
+                st.session_state["wid_meta_krrn_related"] = d.get("meta_krrn_related", "")
+                st.session_state["wid_meta_patent_id"] = d.get("meta_patent_id", "")
+                
+                for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
+                    st.session_state[f"chk_{s}"] = sections.get(s, False)
+                for k, v in FIELD_DEFAULTS.items():
+                    st.session_state[f"val_{k}"] = fields.get(k, v)
+                
+                st.session_state["draft_loaded_alert"] = proj_id
                 st.session_state[cache_flag] = True
                 break
     except Exception as e:
@@ -624,6 +639,17 @@ if st.session_state.active_calc_tab == TABS_LIST[0]:
                 </p>
             </div>
             """, unsafe_allow_html=True)
+            
+    # 📂 Show draft loaded notification if applicable
+    if st.session_state.get("draft_loaded_alert") == proj_id_check and proj_id_check:
+        st.markdown(f"""
+        <div style="background-color: rgba(16, 185, 129, 0.1); border-left: 4px solid #10b981; padding: 1rem; border-radius: 6px; margin: 1rem 0;">
+            <h4 style="color: #10b981; margin: 0 0 0.5rem 0; font-size: 1.1rem; display: flex; align-items: center;">📂 ดึงข้อมูลแบบร่างสำเร็จ (Draft Loaded)</h4>
+            <p style="color: #cbd5e1; margin: 0; font-size: 0.95rem; line-height: 1.5;">
+                พบข้อมูลแบบร่างของรหัสโครงการ <b>{proj_id_check}</b> ในระบบคลาวด์ และได้ทำการดึงข้อมูลมาแสดงผลในแบบฟอร์มเรียบร้อยแล้ว
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
 
     st.text_input(
         "ชื่อโครงการ (Project Name) 👉 [กรอกข้อมูล]",
