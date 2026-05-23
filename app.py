@@ -94,7 +94,7 @@ else:
         <span style="font-size: 0.8rem; color: #94a3b8;">ผู้เข้าใช้งาน (User):</span>
         <div style="font-weight: 800; font-size: 1.1rem; color: #818cf8; margin-top: 0.25rem;">👤 {st.session_state.employee_id}</div>
         <div style="font-size: 0.9rem; color: #06b6d4; margin-top: 0.25rem; font-weight: 500;">🏢 สังกัด: {st.session_state.organization}</div>
-        <div style="font-size: 0.75rem; color: #a1a1aa; margin-top: 0.5rem; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 0.25rem;">🕒 แก้ไขล่าสุด: 23 พ.ค. 2026 - 11:12 น.</div>
+        <div style="font-size: 0.75rem; color: #a1a1aa; margin-top: 0.5rem; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 0.25rem;">🕒 แก้ไขล่าสุด: 23 พ.ค. 2026 - 11:18 น.</div>
     </div>
     """, unsafe_allow_html=True)
     

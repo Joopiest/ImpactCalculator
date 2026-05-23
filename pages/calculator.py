@@ -607,6 +607,24 @@ if st.session_state.active_calc_tab == TABS_LIST[0]:
         placeholder="เช่น P-20-XXXXX",
         help="รหัสอ้างอิงโครงการที่จดทะเบียนของหน่วยงาน"
     )
+    
+    # ⚠️ Check duplicate project ID inside Tab 1 for immediate warning
+    proj_id_check = st.session_state.get("projectId", "").strip().upper()
+    if proj_id_check and firebase_config.is_db_connected():
+        dup_eval_tab1 = firebase_config.check_project_submitted(proj_id_check)
+        if dup_eval_tab1:
+            st.markdown(f"""
+            <div style="background-color: rgba(239, 68, 68, 0.1); border-left: 4px solid #ef4444; padding: 1rem; border-radius: 6px; margin: 1rem 0;">
+                <h4 style="color: #ef4444; margin: 0 0 0.5rem 0; font-size: 1.1rem; display: flex; align-items: center;">⚠️ รหัสโครงการนี้เคยมีการบันทึกส่งแล้วในระบบ (Duplicate Project ID)</h4>
+                <p style="color: #cbd5e1; margin: 0; font-size: 0.95rem; line-height: 1.5;">
+                    รหัสโครงการ <b>{proj_id_check}</b> เคยถูกยื่นส่งประเมินโดยคุณ <b>{dup_eval_tab1.get('employee_id', '-')}</b> ({dup_eval_tab1.get('organization', '-')}) เมื่อ {dup_eval_tab1.get('submitted_at_str', '-')}
+                </p>
+                <p style="color: #94a3b8; margin: 0.5rem 0 0 0; font-size: 0.85rem;">
+                    * คุณยังสามารถแก้ไขข้อมูลและดำเนินการต่อได้ แต่เมื่อยื่นส่งรายงานในแท็บ 5 จะต้องติ๊กถูกเพื่อยืนยันการส่งซ้ำ
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+
     st.text_input(
         "ชื่อโครงการ (Project Name) 👉 [กรอกข้อมูล]",
         
