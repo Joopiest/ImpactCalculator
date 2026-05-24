@@ -72,9 +72,7 @@ def save_draft(employee_id, project_id, draft_data):
             "meta_krid": draft_data.get("meta_krid", ""),
             "meta_krrn_related": draft_data.get("meta_krrn_related", ""),
             "meta_patent_id": draft_data.get("meta_patent_id", ""),
-            "chk_b5_text": draft_data.get("chk_b5_text", "") or draft_data.get("checklist_data", {}).get("chk_b5_text", ""),
-            "checklist_passed": draft_data.get("checklist_passed", False),
-            "checklist_data": draft_data.get("checklist_data", {}),
+            "chk_b5_text": draft_data.get("chk_b5_text", ""),
             "sections": draft_data.get("sections", {}),
             "fields": draft_data.get("fields", {}),
             "saved_at": firestore.SERVER_TIMESTAMP

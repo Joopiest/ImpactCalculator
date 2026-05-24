@@ -4,20 +4,9 @@ import requests
 import firebase_config
 from datetime import datetime
 
-# EARLY STATE BACKUP: Prevent Streamlit data loss from unmounted widgets!
-# Streamlit deletes unmounted widgets at the end of a rerun.
-# If a widget update (like a blur event) arrives in a rerun where the widget isn't rendered
-# (e.g., during a tab switch), we MUST capture it before Streamlit deletes it!
-for _k, _v in list(st.session_state.items()):
-    if _k.startswith("val_") or _k.startswith("chk_"):
-        st.session_state[f"_p_{_k}"] = _v
-    elif _k.startswith("wid_"):
-        field_name = _k[4:]
-        val = _v
-        if field_name == "projectId" and isinstance(val, str):
-            val = val.upper()
-            st.session_state[_k] = val
-        st.session_state[field_name] = val
+# EARLY STATE BACKUP REMOVED: It was found to capture zeroed-out unmounting widgets.
+# Shadow keys (_p_...) are now the absolute Source of Truth.
+# Widgets only update shadow keys via on_change callbacks.
 
 # Fallback initialization in case user navigates here directly, bypassing app.py
 if "authenticated" not in st.session_state:
@@ -44,7 +33,7 @@ if proj_id and firebase_config.is_db_connected():
     if cache_flag not in st.session_state:
         has_draft = firebase_config.check_project_draft(st.session_state.get("employee_id", ""), proj_id)
         has_eval = firebase_config.check_project_submitted(proj_id)
-        if not has_draft and not has_eval:
+        if has_draft is False and has_eval is False:
             st.session_state[cache_flag] = True
 
 # Inject background JavaScript to automatically detect browser autofill on input fields
@@ -231,6 +220,10 @@ FIELD_DEFAULTS = {
 
 def sync_chk(section):
     """Callback to sync checkbox state to persistent shadow key AND Firestore immediately."""
+    tab_for_sec = TABS_LIST[2] if section in ['H', 'I', 'J'] else TABS_LIST[1]
+    if st.session_state.get("active_calc_tab") != tab_for_sec:
+        return
+        
     w_key = f"chk_{section}"
     p_key = f"_p_chk_{section}"
     if w_key in st.session_state:
@@ -255,6 +248,11 @@ def sync_chk(section):
 
 def sync_val(field_id):
     """Callback to sync field value to persistent shadow key AND Firestore immediately."""
+    sec_char = field_id[0].upper()
+    tab_for_field = TABS_LIST[2] if sec_char in ['H', 'I', 'J'] else TABS_LIST[1]
+    if st.session_state.get("active_calc_tab") != tab_for_field:
+        return
+        
     w_key = f"val_{field_id}"
     p_key = f"_p_val_{field_id}"
     if w_key in st.session_state:
@@ -294,7 +292,7 @@ def sync_project_meta():
         if proj_id and firebase_config.is_db_connected():
             has_draft = firebase_config.check_project_draft(st.session_state.employee_id, proj_id)
             has_eval = firebase_config.check_project_submitted(proj_id)
-            if not has_draft and not has_eval:
+            if has_draft is False and has_eval is False:
                 st.session_state[f"_cloud_loaded_{proj_id}"] = True
                     
     # Trigger autosave to cloud for extra safety
@@ -375,82 +373,6 @@ def get_tab_keys(tab_name):
     return [], []
 
 
-def cloud_load_on_startup(force=False):
-    """Load draft from Firestore into shadow keys on page startup.
-    This ensures that even after a page refresh, data is restored from cloud.
-    Only runs once per project load (uses _cloud_loaded flag) unless force=True."""
-    if not firebase_config.is_db_connected():
-        return
-    proj_id = st.session_state.get("projectId", "").strip()
-    emp_id = st.session_state.get("employee_id", "").strip()
-    if not proj_id or not emp_id:
-        return
-    # Only load once per project
-    cache_flag = f"_cloud_loaded_{proj_id}"
-    if st.session_state.get(cache_flag) and not force:
-        return
-    try:
-        drafts = firebase_config.load_drafts(emp_id)
-        for d in drafts:
-            if d.get("project_id", "").strip() == proj_id:
-                # Populate shadow keys from Firestore
-                sections = d.get("sections", {})
-                for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
-                    st.session_state[f"_p_chk_{s}"] = sections.get(s, False)
-                fields = d.get("fields", {})
-                for k, v in FIELD_DEFAULTS.items():
-                    st.session_state[f"_p_val_{k}"] = fields.get(k, v)
-                # Also restore metadata
-                st.session_state.projectName = d.get("project_name", st.session_state.get("projectName", ""))
-                st.session_state.reportType = d.get("report_type", st.session_state.get("reportType", "รายปี"))
-                st.session_state.meta_krrn = d.get("meta_krrn", st.session_state.get("meta_krrn", ""))
-                st.session_state.meta_krid = d.get("meta_krid", st.session_state.get("meta_krid", ""))
-                st.session_state.meta_krrn_related = d.get("meta_krrn_related", st.session_state.get("meta_krrn_related", ""))
-                st.session_state.meta_patent_id = d.get("meta_patent_id", st.session_state.get("meta_patent_id", ""))
-                
-                # Update widget states so they show up on screen immediately
-                st.session_state["wid_projectName"] = d.get("project_name", "")
-                st.session_state["wid_reportType"] = d.get("report_type", "รายปี")
-                st.session_state["wid_meta_krrn"] = d.get("meta_krrn", "")
-                st.session_state["wid_meta_krid"] = d.get("meta_krid", "")
-                st.session_state["wid_meta_krrn_related"] = d.get("meta_krrn_related", "")
-                st.session_state["wid_meta_patent_id"] = d.get("meta_patent_id", "")
-                
-                for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
-                    st.session_state[f"chk_{s}"] = sections.get(s, False)
-                for k, v in FIELD_DEFAULTS.items():
-                    st.session_state[f"val_{k}"] = fields.get(k, v)
-                
-                # Restore Checklist State
-                st.session_state.checklist_passed = d.get("checklist_passed", False)
-                st.session_state.checklist_data = d.get("checklist_data", {})
-                
-                chk_data = d.get("checklist_data", {})
-                st.session_state.chk_a1 = chk_data.get("chk_a1", False)
-                st.session_state.chk_a2 = chk_data.get("chk_a2", False)
-                st.session_state.chk_b1 = chk_data.get("chk_b1", False)
-                st.session_state.chk_b2 = chk_data.get("chk_b2", False)
-                st.session_state.chk_b3 = chk_data.get("chk_b3", False)
-                st.session_state.chk_b4 = chk_data.get("chk_b4", False)
-                st.session_state.chk_b5 = chk_data.get("chk_b5", False)
-                st.session_state.chk_b5_text = chk_data.get("chk_b5_text", "")
-                
-                # Also assign backup keys for pages/checklist.py
-                st.session_state._p_chk_a1 = st.session_state.chk_a1
-                st.session_state._p_chk_a2 = st.session_state.chk_a2
-                st.session_state._p_chk_b1 = st.session_state.chk_b1
-                st.session_state._p_chk_b2 = st.session_state.chk_b2
-                st.session_state._p_chk_b3 = st.session_state.chk_b3
-                st.session_state._p_chk_b4 = st.session_state.chk_b4
-                st.session_state._p_chk_b5 = st.session_state.chk_b5
-                st.session_state._p_chk_b5_text = st.session_state.chk_b5_text
-                
-                st.session_state["draft_loaded_alert"] = proj_id
-                st.session_state[cache_flag] = True
-                break
-    except Exception as e:
-        print(f"cloud_load_on_startup error: {e}")
-
 # 4. Core Lifecycle Initialization & Early Tab Transition Check
 if "checklist_passed" not in st.session_state:
     st.session_state.checklist_passed = False
@@ -468,7 +390,7 @@ for field in main_persistent:
         st.session_state[field] = "รายปี" if field == "reportType" else ""
 
 # Load data from Firestore on startup
-cloud_load_on_startup()
+# (Removed cloud_load_on_startup because it silently overwrites the prompt system)
 
 def _pv(key, default=0.0):
     """Read field value directly from persistent shadow key, or fallback to active widget state."""
@@ -487,14 +409,30 @@ def _pc(section):
     """Read checkbox state directly from persistent shadow key, or fallback to active widget state."""
     w_key = f"chk_{section}"
     p_key = f"_p_chk_{section}"
+    val = False
+    
     # 1. If widget is active and in session state, it's the absolute source of truth
     if w_key in st.session_state:
         st.session_state[p_key] = st.session_state[w_key]
-        return st.session_state[w_key]
-    # 2. Otherwise use the persistent shadow key
-    p_val = st.session_state.get(p_key)
-    if p_val is not None: return p_val
-    return False
+        val = st.session_state[w_key]
+    else:
+        # 2. Otherwise use the persistent shadow key
+        p_val = st.session_state.get(p_key)
+        if p_val is not None:
+            val = p_val
+            
+    # --- HARD EXCLUSIVITY ENFORCEMENT ---
+    # If we are reading 'B' and it claims to be True, double check if C-G are True.
+    # If any of C-G are True, B MUST be False!
+    if section == 'B' and val:
+        for s in ['C', 'D', 'E', 'F', 'G']:
+            if st.session_state.get(f"_p_chk_{s}", False) or st.session_state.get(f"chk_{s}", False):
+                st.session_state[p_key] = False
+                if w_key in st.session_state:
+                    st.session_state[w_key] = False
+                return False
+                
+    return val
 
 def _gm(field):
     """Robustly get project metadata from any possible state key."""
@@ -651,9 +589,8 @@ if detected_change:
     st.session_state.segmented_calc_tab = target_tab
     st.session_state.last_active_tab = target_tab
     
-    # Backup the now-updated shadow keys to the cloud immediately
-    autosave_to_cloud()
-    
+    # We remove the immediate autosave to cloud here to prevent UI hangs.
+    # Shadow keys are already updated locally.
     pass
 else:
     pass
@@ -788,97 +725,99 @@ if st.session_state.active_calc_tab == TABS_LIST[0]:
                 
         # Case B: Check if project draft exists in Drafts
         else:
-            dup_draft = firebase_config.check_project_draft(emp_id, proj_id_check)
-            if dup_draft:
-                choice = st.session_state.get("draft_choice")
-                if choice is None:
-                    st.markdown(f"""
-                    <div style="background-color: rgba(245, 158, 11, 0.15); border-left: 4px solid #f59e0b; padding: 1.2rem; border-radius: 8px; margin: 1rem 0;">
-                        <h4 style="color: #f59e0b; margin: 0 0 0.5rem 0; font-size: 1.1rem; font-weight: 700;">📂 ตรวจพบแบบร่างที่มีอยู่แล้ว (Existing Draft Found)</h4>
-                        <p style="color: #cbd5e1; margin: 0; font-size: 0.95rem; line-height: 1.6;">
-                            ระบบพบข้อมูลแบบร่างของโครงการ <b>{proj_id_check}</b> ที่เคยบันทึกไว้ในชื่อ <i>"{dup_draft.get('project_name', '')}"</i>
-                        </p>
-                        <p style="color: #fef08a; margin: 0.5rem 0 0 0; font-size: 0.9rem; font-weight: 500;">
-                            กรุณาเลือกว่าคุณต้องการดึงข้อมูลแบบร่างเดิมกลับมาแก้ไข หรือต้องการลบแบบร่างทิ้งเพื่อกรอกใหม่ทั้งหมด
-                        </p>
-                    </div>
-                    """, unsafe_allow_html=True)
+            # Only check for draft prompt if we haven't already marked this project as loaded/fresh
+            if not st.session_state.get(f"_cloud_loaded_{proj_id_check}", False):
+                dup_draft = firebase_config.check_project_draft(emp_id, proj_id_check)
+                if dup_draft:
+                    choice = st.session_state.get("draft_choice")
+                    if choice is None:
+                        st.markdown(f"""
+                        <div style="background-color: rgba(245, 158, 11, 0.15); border-left: 4px solid #f59e0b; padding: 1.2rem; border-radius: 8px; margin: 1rem 0;">
+                            <h4 style="color: #f59e0b; margin: 0 0 0.5rem 0; font-size: 1.1rem; font-weight: 700;">📂 ตรวจพบแบบร่างที่มีอยู่แล้ว (Existing Draft Found)</h4>
+                            <p style="color: #cbd5e1; margin: 0; font-size: 0.95rem; line-height: 1.6;">
+                                ระบบพบข้อมูลแบบร่างของโครงการ <b>{proj_id_check}</b> ที่เคยบันทึกไว้ในชื่อ <i>"{dup_draft.get('project_name', '')}"</i>
+                            </p>
+                            <p style="color: #fef08a; margin: 0.5rem 0 0 0; font-size: 0.9rem; font-weight: 500;">
+                                กรุณาเลือกว่าคุณต้องการดึงข้อมูลแบบร่างเดิมกลับมาแก้ไข หรือต้องการลบแบบร่างทิ้งเพื่อกรอกใหม่ทั้งหมด
+                            </p>
+                        </div>
+                        """, unsafe_allow_html=True)
                     
-                    col_load, col_delete = st.columns(2)
-                    with col_load:
-                        if st.button("🔄 โหลดแบบร่างเดิม (Load Draft)", type="primary", use_container_width=True, key="btn_draft_load"):
-                            # Force load draft values
-                            sections = dup_draft.get("sections", {})
-                            for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
-                                st.session_state[f"_p_chk_{s}"] = sections.get(s, False)
-                                st.session_state[f"chk_{s}"] = sections.get(s, False)
-                            fields = dup_draft.get("fields", {})
-                            for k, v in FIELD_DEFAULTS.items():
-                                st.session_state[f"_p_val_{k}"] = fields.get(k, v)
-                                st.session_state[f"val_{k}"] = fields.get(k, v)
+                        col_load, col_delete = st.columns(2)
+                        with col_load:
+                            if st.button("🔄 โหลดแบบร่างเดิม (Load Draft)", type="primary", use_container_width=True, key="btn_draft_load"):
+                                # Force load draft values
+                                sections = dup_draft.get("sections", {})
+                                for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
+                                    st.session_state[f"_p_chk_{s}"] = sections.get(s, False)
+                                    st.session_state[f"chk_{s}"] = sections.get(s, False)
+                                fields = dup_draft.get("fields", {})
+                                for k, v in FIELD_DEFAULTS.items():
+                                    st.session_state[f"_p_val_{k}"] = fields.get(k, v)
+                                    st.session_state[f"val_{k}"] = fields.get(k, v)
                                 
-                            st.session_state.projectName = dup_draft.get("project_name", "")
-                            st.session_state.reportType = dup_draft.get("report_type", "รายปี")
-                            st.session_state.meta_krrn = dup_draft.get("meta_krrn", "")
-                            st.session_state.meta_krid = dup_draft.get("meta_krid", "")
-                            st.session_state.meta_krrn_related = dup_draft.get("meta_krrn_related", "")
-                            st.session_state.meta_patent_id = dup_draft.get("meta_patent_id", "")
+                                st.session_state.projectName = dup_draft.get("project_name", "")
+                                st.session_state.reportType = dup_draft.get("report_type", "รายปี")
+                                st.session_state.meta_krrn = dup_draft.get("meta_krrn", "")
+                                st.session_state.meta_krid = dup_draft.get("meta_krid", "")
+                                st.session_state.meta_krrn_related = dup_draft.get("meta_krrn_related", "")
+                                st.session_state.meta_patent_id = dup_draft.get("meta_patent_id", "")
                             
-                            st.session_state["wid_projectName"] = dup_draft.get("project_name", "")
-                            st.session_state["wid_reportType"] = dup_draft.get("report_type", "รายปี")
-                            st.session_state["wid_meta_krrn"] = dup_draft.get("meta_krrn", "")
-                            st.session_state["wid_meta_krid"] = dup_draft.get("meta_krid", "")
-                            st.session_state["wid_meta_krrn_related"] = dup_draft.get("meta_krrn_related", "")
-                            st.session_state["wid_meta_patent_id"] = dup_draft.get("meta_patent_id", "")
+                                st.session_state["wid_projectName"] = dup_draft.get("project_name", "")
+                                st.session_state["wid_reportType"] = dup_draft.get("report_type", "รายปี")
+                                st.session_state["wid_meta_krrn"] = dup_draft.get("meta_krrn", "")
+                                st.session_state["wid_meta_krid"] = dup_draft.get("meta_krid", "")
+                                st.session_state["wid_meta_krrn_related"] = dup_draft.get("meta_krrn_related", "")
+                                st.session_state["wid_meta_patent_id"] = dup_draft.get("meta_patent_id", "")
                             
-                            st.session_state[f"_cloud_loaded_{proj_id_check}"] = True
-                            st.session_state["draft_choice"] = "load"
-                            st.session_state["draft_loaded_alert"] = proj_id_check
-                            st.success("🔄 โหลดแบบร่างเรียบร้อยแล้ว!")
-                            st.rerun()
-                    with col_delete:
-                        if st.button("❌ ลบแบบร่างเดิมและเริ่มใหม่ (Delete & Start Fresh)", type="secondary", use_container_width=True, key="btn_draft_delete"):
-                            # Delete draft in cloud
-                            firebase_config.delete_draft(dup_draft.get("id"))
-                            st.session_state["draft_choice"] = "delete"
-                            st.session_state.pop("draft_loaded_alert", None)
+                                st.session_state[f"_cloud_loaded_{proj_id_check}"] = True
+                                st.session_state["draft_choice"] = "load"
+                                st.session_state["draft_loaded_alert"] = proj_id_check
+                                st.success("🔄 โหลดแบบร่างเรียบร้อยแล้ว!")
+                                st.rerun()
+                        with col_delete:
+                            if st.button("❌ ลบแบบร่างเดิมและเริ่มใหม่ (Delete & Start Fresh)", type="secondary", use_container_width=True, key="btn_draft_delete"):
+                                # Delete draft in cloud
+                                firebase_config.delete_draft(dup_draft.get("id"))
+                                st.session_state["draft_choice"] = "delete"
+                                st.session_state.pop("draft_loaded_alert", None)
                             
-                            # Clear form values (but keep projectId)
-                            st.session_state.projectName = ""
-                            st.session_state.reportType = "รายปี"
-                            st.session_state.meta_krrn = ""
-                            st.session_state.meta_krid = ""
-                            st.session_state.meta_krrn_related = ""
-                            st.session_state.meta_patent_id = ""
+                                # Clear form values (but keep projectId)
+                                st.session_state.projectName = ""
+                                st.session_state.reportType = "รายปี"
+                                st.session_state.meta_krrn = ""
+                                st.session_state.meta_krid = ""
+                                st.session_state.meta_krrn_related = ""
+                                st.session_state.meta_patent_id = ""
                             
-                            st.session_state["wid_projectName"] = ""
-                            st.session_state["wid_reportType"] = "รายปี"
-                            st.session_state["wid_meta_krrn"] = ""
-                            st.session_state["wid_meta_krid"] = ""
-                            st.session_state["wid_meta_krrn_related"] = ""
-                            st.session_state["wid_meta_patent_id"] = ""
+                                st.session_state["wid_projectName"] = ""
+                                st.session_state["wid_reportType"] = "รายปี"
+                                st.session_state["wid_meta_krrn"] = ""
+                                st.session_state["wid_meta_krid"] = ""
+                                st.session_state["wid_meta_krrn_related"] = ""
+                                st.session_state["wid_meta_patent_id"] = ""
                             
-                            for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
-                                st.session_state[f"_p_chk_{s}"] = False
-                                st.session_state[f"chk_{s}"] = False
-                            for k, v in FIELD_DEFAULTS.items():
-                                st.session_state[f"_p_val_{k}"] = v
-                                st.session_state[f"val_{k}"] = v
+                                for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
+                                    st.session_state[f"_p_chk_{s}"] = False
+                                    st.session_state[f"chk_{s}"] = False
+                                for k, v in FIELD_DEFAULTS.items():
+                                    st.session_state[f"_p_val_{k}"] = v
+                                    st.session_state[f"val_{k}"] = v
                                 
-                            st.session_state[f"_cloud_loaded_{proj_id_check}"] = True
-                            st.warning("❌ ลบแบบร่างเดิมเรียบร้อย พร้อมสำหรับการกรอกข้อมูลโครงการใหม่")
-                            st.rerun()
-                elif choice == "load":
-                    st.markdown(f"""
-                    <div style="background-color: rgba(16, 185, 129, 0.1); border-left: 4px solid #10b981; padding: 1rem; border-radius: 6px; margin: 1rem 0;">
-                        <h4 style="color: #10b981; margin: 0 0 0.25rem 0; font-size: 1rem; font-weight: 700;">📂 ดึงข้อมูลแบบร่างสำเร็จ (Draft Loaded)</h4>
-                        <p style="color: #cbd5e1; margin: 0; font-size: 0.9rem;">
-                            แบบร่างของโครงการ <b>{proj_id_check}</b> ถูกโหลดเข้ามาในแบบฟอร์มเรียบร้อยแล้ว
-                        </p>
-                    </div>
-                    """, unsafe_allow_html=True)
-                elif choice == "delete":
-                    st.info("ℹ️ ลบแบบร่างเดิมเรียบร้อยแล้ว ปัจจุบันคุณกำลังดำเนินการเขียนข้อมูลโครงการใหม่ขึ้นทดแทน")
+                                st.session_state[f"_cloud_loaded_{proj_id_check}"] = True
+                                st.warning("❌ ลบแบบร่างเดิมเรียบร้อย พร้อมสำหรับการกรอกข้อมูลโครงการใหม่")
+                                st.rerun()
+                    elif choice == "load":
+                        st.markdown(f"""
+                        <div style="background-color: rgba(16, 185, 129, 0.1); border-left: 4px solid #10b981; padding: 1rem; border-radius: 6px; margin: 1rem 0;">
+                            <h4 style="color: #10b981; margin: 0 0 0.25rem 0; font-size: 1rem; font-weight: 700;">📂 ดึงข้อมูลแบบร่างสำเร็จ (Draft Loaded)</h4>
+                            <p style="color: #cbd5e1; margin: 0; font-size: 0.9rem;">
+                                แบบร่างของโครงการ <b>{proj_id_check}</b> ถูกโหลดเข้ามาในแบบฟอร์มเรียบร้อยแล้ว
+                            </p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    elif choice == "delete":
+                        st.info("ℹ️ ลบแบบร่างเดิมเรียบร้อยแล้ว ปัจจุบันคุณกำลังดำเนินการเขียนข้อมูลโครงการใหม่ขึ้นทดแทน")
 
     st.text_input(
         "ชื่อโครงการ (Project Name) 👉 [กรอกข้อมูล]",

@@ -35,6 +35,20 @@ def load_css():
 
 load_css()
 
+# Optimized history loading with caching to prevent UI freeze
+@st.cache_data(ttl=60, show_spinner=False)
+def get_cached_history(emp_id):
+    if not emp_id or emp_id == "Guest":
+        return [], []
+    try:
+        if firebase_config.is_db_connected():
+            drafts = firebase_config.load_drafts(emp_id)
+            evals = firebase_config.load_user_evaluations(emp_id)
+            return drafts, evals
+    except Exception:
+        pass
+    return [], []
+
 # Inject background JavaScript to automatically detect browser autofill on input fields
 # and dispatch synthetic events so Streamlit's React frontend registers the values.
 components.html(
@@ -42,7 +56,7 @@ components.html(
     <script>
         const syncStreamlitInputs = (forceBlur, skipActive) => {
             const doc = window.parent.document;
-            const inputs = doc.querySelectorAll('input, textarea, select');
+            const inputs = doc.querySelectorAll('input:not([type="checkbox"]):not([type="radio"]), textarea, select');
             let hasChanges = false;
             
             inputs.forEach(input => {
@@ -69,7 +83,9 @@ components.html(
                     
                     input.dispatchEvent(new EventConstructor('input', { bubbles: true }));
                     input.dispatchEvent(new EventConstructor('change', { bubbles: true }));
-                    input.dispatchEvent(new EventConstructor('blur', { bubbles: true }));
+                    if (forceBlur) {
+                        input.dispatchEvent(new EventConstructor('blur', { bubbles: true }));
+                    }
                 }
             });
 
@@ -84,7 +100,7 @@ components.html(
 
         const checkIfInputsHaveChanges = () => {
             const doc = window.parent.document;
-            const inputs = doc.querySelectorAll('input, textarea, select');
+            const inputs = doc.querySelectorAll('input:not([type="checkbox"]):not([type="radio"]), textarea, select');
             for (let input of inputs) {
                 const val = input.value;
                 const lastVal = input.getAttribute('data-last-synced') || '';
@@ -95,75 +111,87 @@ components.html(
             return false;
         };
 
+        // Clean up previous interval if it exists on window.parent
+        if (window.parent._autofillIntervalId) {
+            window.parent.clearInterval(window.parent._autofillIntervalId);
+            window.parent._autofillIntervalId = null;
+        }
+
+        // Clean up previous event listeners if they exist on window.parent
+        if (window.parent._clickListener) {
+            window.parent.document.removeEventListener('click', window.parent._clickListener, true);
+            window.parent._clickListener = null;
+        }
+        if (window.parent._mouseoverListener) {
+            window.parent.document.removeEventListener('mouseover', window.parent._mouseoverListener);
+            window.parent._mouseoverListener = null;
+        }
+
         // Always update the sync references on the parent window to point to the active iframe
         window.parent._syncStreamlitInputsNow = syncStreamlitInputs;
         window.parent._checkIfInputsHaveChanges = checkIfInputsHaveChanges;
 
-        if (!window.parent._autofillInterval) {
-            let lastSync = 0;
-            const syncLoop = (now) => {
-                if (now - lastSync > 200) {
-                    if (window.parent._syncStreamlitInputsNow) {
-                        window.parent._syncStreamlitInputsNow(false, true);
-                    }
-                    lastSync = now;
+        // Start a new interval sync loop
+        window.parent._autofillIntervalId = window.parent.setInterval(() => {
+            if (window.parent._syncStreamlitInputsNow) {
+                window.parent._syncStreamlitInputsNow(false, true);
+            }
+        }, 200);
+
+        // Register a new click listener
+        window.parent._clickListener = (e) => {
+            const target = e.target.closest('button, [role="button"], [role="option"], [role="tab"], [data-testid="stSegmentedControlItem"], [data-testid="stSidebarNavLink"], label');
+            if (target) {
+                let hasChanges = false;
+                if (window.parent._checkIfInputsHaveChanges) {
+                    hasChanges = window.parent._checkIfInputsHaveChanges();
                 }
-                window.parent.requestAnimationFrame(syncLoop);
-            };
-            window.parent.requestAnimationFrame(syncLoop);
-            window.parent._autofillInterval = true;
-            
-            window.parent.document.addEventListener('click', (e) => {
-                const target = e.target.closest('button, [role="button"], [role="option"], [role="tab"], [data-testid="stSegmentedControlItem"], [data-testid="stSidebarNavLink"], label');
-                if (target) {
-                    let hasChanges = false;
-                    if (window.parent._checkIfInputsHaveChanges) {
-                        hasChanges = window.parent._checkIfInputsHaveChanges();
+                
+                if (hasChanges && !target.hasAttribute('data-sync-delayed')) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    
+                    if (window.parent._syncStreamlitInputsNow) {
+                        window.parent._syncStreamlitInputsNow(true, false);
                     }
                     
-                    if (hasChanges && !target.hasAttribute('data-sync-delayed')) {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        
-                        if (window.parent._syncStreamlitInputsNow) {
-                            window.parent._syncStreamlitInputsNow(true, false);
+                    const savedText = target.textContent;
+                    const savedTestId = target.getAttribute('data-testid');
+                    
+                    window.parent.setTimeout(() => {
+                        const doc = window.parent.document;
+                        let found = null;
+                        const selector = 'button, [role="button"], [role="option"], [role="tab"], [data-testid="stSegmentedControlItem"], [data-testid="stSidebarNavLink"], label';
+                        const elements = doc.querySelectorAll(selector);
+                        for (let el of elements) {
+                            if (el.textContent === savedText) {
+                                found = el;
+                                break;
+                            }
                         }
-                        
-                        const savedText = target.textContent;
-                        const savedTestId = target.getAttribute('data-testid');
-                        
-                        window.parent.setTimeout(() => {
-                            const doc = window.parent.document;
-                            let found = null;
-                            const selector = 'button, [role="button"], [role="option"], [role="tab"], [data-testid="stSegmentedControlItem"], [data-testid="stSidebarNavLink"], label';
-                            const elements = doc.querySelectorAll(selector);
-                            for (let el of elements) {
-                                if (el.textContent === savedText) {
-                                    found = el;
-                                    break;
-                                }
-                            }
-                            if (!found && savedTestId) {
-                                found = doc.querySelector(`[data-testid="${savedTestId}"]`);
-                            }
-                            if (!found) {
-                                found = target;
-                            }
-                            found.setAttribute('data-sync-delayed', 'true');
-                            found.click();
-                            found.removeAttribute('data-sync-delayed');
-                        }, 400);
-                    }
+                        if (!found && savedTestId) {
+                            found = doc.querySelector(`[data-testid="${savedTestId}"]`);
+                        }
+                        if (!found) {
+                            found = target;
+                        }
+                        found.setAttribute('data-sync-delayed', 'true');
+                        found.click();
+                        found.removeAttribute('data-sync-delayed');
+                    }, 450); 
                 }
-            }, true);
+            }
+        };
+        window.parent.document.addEventListener('click', window.parent._clickListener, true);
 
-            window.parent.document.addEventListener('mouseover', (e) => {
-                const target = e.target.closest('button, [role="button"], [role="option"], [role="tab"], [data-testid="stSegmentedControlItem"], [data-testid="stSidebarNavLink"], label');
-                if (target && window.parent._syncStreamlitInputsNow) {
-                    window.parent._syncStreamlitInputsNow(false, true);
-                }
-            });
-        }
+        // Register a new mouseover listener
+        window.parent._mouseoverListener = (e) => {
+            const target = e.target.closest('button, [role="button"], [role="option"], [role="tab"], [data-testid="stSegmentedControlItem"], [data-testid="stSidebarNavLink"], label');
+            if (target && window.parent._syncStreamlitInputsNow) {
+                window.parent._syncStreamlitInputsNow(false, true);
+            }
+        };
+        window.parent.document.addEventListener('mouseover', window.parent._mouseoverListener);
     </script>
     ''',
     height=0,
@@ -201,7 +229,7 @@ if not st.session_state.authenticated:
             else:
                 st.info("สำหรับผู้มาเยือน (Guest) ไม่จำเป็นต้องระบุรหัสพนักงาน")
                 
-            submit_button = st.form_submit_value = st.form_submit_button("เข้าสู่ระบบ (Log In)", use_container_width=True)
+            submit_button = st.form_submit_button("เข้าสู่ระบบ (Log In)", use_container_width=True)
             
             if submit_button:
                 if org != "Guest" and len(emp_id.strip()) < 3:
@@ -211,7 +239,6 @@ if not st.session_state.authenticated:
                     st.session_state.organization = org
                     st.session_state.employee_id = emp_id.strip() if org != "Guest" else "Guest"
                     st.session_state.just_logged_in = True
-                    st.success("🔓 เข้าสู่ระบบสำเร็จ กำลังดาวน์โหลดข้อมูล...")
                     st.rerun()
                     
         st.markdown("<div style='text-align: center; margin: 0.5rem 0; color: #64748b; font-size: 0.9rem;'>หรือ</div>", unsafe_allow_html=True)
@@ -220,161 +247,202 @@ if not st.session_state.authenticated:
             st.session_state.organization = "Guest"
             st.session_state.employee_id = "Guest"
             st.session_state.just_logged_in = True
-            st.success("🔓 เข้าสู่ระบบในฐานะผู้มาเยือนสำเร็จ...")
             st.rerun()
 
 else:
     # 5. Sidebar Navigation Profile & Logout
-    st.sidebar.markdown(f"""
-    <div class="user-profile-card">
-        <span style="font-size: 0.8rem; color: #94a3b8;">ผู้เข้าใช้งาน (User):</span>
-        <div style="font-weight: 800; font-size: 1.1rem; color: #818cf8; margin-top: 0.25rem;">👤 {st.session_state.employee_id}</div>
-        <div style="font-size: 0.9rem; color: #06b6d4; margin-top: 0.25rem; font-weight: 500;">🏢 สังกัด: {st.session_state.organization}</div>
-        <div style="font-size: 0.75rem; color: #a1a1aa; margin-top: 0.5rem; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 0.25rem;">🕒 แก้ไขล่าสุด: 23 พ.ค. 2026 - 23:11 น.</div>
-    </div>
-    """, unsafe_allow_html=True)
+    emp_id = st.session_state.employee_id
+    org = st.session_state.organization
+    st.sidebar.markdown("""
+        <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 20px;">
+            <p style="margin: 0; font-size: 0.9em; color: #475569;">👤 <b>ผู้ใช้งาน:</b> {emp_id}</p>
+            <p style="margin: 5px 0 0 0; font-size: 0.9em; color: #475569;">🏢 <b>สังกัด:</b> {org}</p>
+            <hr style="margin: 10px 0; border-color: #e2e8f0;">
+            <p style="margin: 0; font-size: 0.8em; color: #64748b;">🕒 แก้ไขล่าสุด: 24 พ.ค. 2026 - 22:38 น.</p>
+        </div>
+        """.format(emp_id=emp_id, org=org), unsafe_allow_html=True)
     
     # Firestore Connection Alert
     if firebase_config.is_db_connected():
         st.sidebar.markdown("<div style='font-size: 0.75rem; color: #10b981; margin-bottom: 0.5rem;'>🟢 เชื่อมต่อคลาวด์ Firebase สำเร็จ</div>", unsafe_allow_html=True)
     else:
         st.sidebar.markdown("<div style='font-size: 0.75rem; color: #ef4444; margin-bottom: 0.5rem;'>🔴 ไม่พบการเชื่อมต่อ Firebase (ทำงานในระบบ Local)</div>", unsafe_allow_html=True)
+        
+    with st.sidebar.expander("🛠️ Debug Session State"):
+        # filter to just _cloud_loaded_, projectId, draft_choice, last_checked_pid
+        keys = [k for k in st.session_state.keys() if "cloud_loaded" in k or "projectId" in k or "draft_choice" in k or "last_checked" in k]
+        for k in keys:
+            st.write(f"{k} = {st.session_state[k]}")
 
     # ── HISTORY & DRAFTS (sidebar) ──────────────────────────────────────────
     if firebase_config.is_db_connected():
         st.sidebar.markdown("---")
-        st.sidebar.markdown("<div style='font-size:0.8rem; font-weight:700; color:#818cf8; margin-bottom:0.5rem;'>📂 ประวัติงานของฉัน (My History)</div>", unsafe_allow_html=True)
-        
-        # Load both Drafts and Evaluations
-        drafts = firebase_config.load_drafts(st.session_state.employee_id)
-        evals = firebase_config.load_user_evaluations(st.session_state.employee_id)
-        
-        options_map = {}
-        for d in drafts:
-            label = f"📝 [ร่าง] {d['project_id']} — {d['project_name']}"
-            options_map[label] = {"data": d, "type": "draft"}
-        for e in evals:
-            label = f"✅ [ส่งแล้ว] {e['project_id']} — {e['project_name']}"
-            options_map[label] = {"data": e, "type": "evaluation"}
+        with st.sidebar.expander("📂 ประวัติงานของฉัน (My History)", expanded=False):
+            st.caption("กำลังดึงข้อมูลจากระบบคลาวด์...")
             
-        if options_map:
-            selected_label = st.sidebar.selectbox(
-                "เลือกรายการเพื่อโหลดใหม่:",
-                ["— เลือกรายการ —"] + list(options_map.keys()),
-                key="sidebar_history_selector",
-                label_visibility="collapsed"
-            )
+            # Optimized with caching and visual feedback
+            @st.cache_data(ttl=60, show_spinner=False)
+            def get_cached_history(emp_id):
+                try:
+                    if not emp_id or emp_id == "Guest":
+                        return [], []
+                    
+                    firebase_config.get_db()
+                    
+                    import threading
+                    
+                    result = []
+                    
+                    def fetch_data():
+                        try:
+                            d = firebase_config.load_drafts(emp_id)
+                            e = firebase_config.load_user_evaluations(emp_id)
+                            result.append((d, e))
+                        except Exception:
+                            pass
+                            
+                    t = threading.Thread(target=fetch_data, daemon=True)
+                    t.start()
+                    t.join(timeout=3.0)
+                    
+                    if t.is_alive():
+                        print("Firebase fetch timed out (Daemon thread left running in background)")
+                        return [], []
+                    elif result:
+                        return result[0]
+                    else:
+                        return [], []
+                except Exception as e:
+                    print(f"Error fetching history: {e}")
+                    return [], []
+
+            drafts, evals = get_cached_history(st.session_state.employee_id)
             
-            if selected_label != "— เลือกรายการ —":
-                selection = options_map[selected_label]
-                item_data = selection["data"]
+            options_map = {}
+            for d in drafts:
+                label = f"📝 [ร่าง] {d['project_id']} — {d['project_name']}"
+                options_map[label] = {"data": d, "type": "draft"}
+            for e in evals:
+                label = f"✅ [ส่งแล้ว] {e['project_id']} — {e['project_name']}"
+                options_map[label] = {"data": e, "type": "evaluation"}
                 
-                if st.sidebar.button("🔄 โหลดข้อมูลนี้", use_container_width=True, key="sidebar_load_btn", type="primary"):
+            if options_map:
+                selected_label = st.selectbox(
+                    "เลือกรายการเพื่อโหลดใหม่:",
+                    ["— เลือกรายการ —"] + list(options_map.keys()),
+                    key="sidebar_history_selector",
+                    label_visibility="collapsed"
+                )
+                
+                if selected_label != "— เลือกรายการ —":
+                    selection = options_map[selected_label]
+                    item_data = selection["data"]
+                    
+                    if st.button("🔄 โหลดข้อมูลนี้", use_container_width=True, key="sidebar_load_btn", type="primary"):
+                        # Extract loaded values
+                        proj_id = item_data.get("project_id", "")
+                        proj_name = item_data.get("project_name", "")
+                        rep_type = item_data.get("report_type", "รายปี")
+                        meta_krrn = item_data.get("meta_krrn", "")
+                        meta_krid = item_data.get("meta_krid", "")
+                        meta_krrn_related = item_data.get("meta_krrn_related", "")
+                        meta_patent_id = item_data.get("meta_patent_id", "")
 
-                    # Extract loaded values
-                    proj_id = item_data.get("project_id", "")
-                    proj_name = item_data.get("project_name", "")
-                    rep_type = item_data.get("report_type", "รายปี")
-                    meta_krrn = item_data.get("meta_krrn", "")
-                    meta_krid = item_data.get("meta_krid", "")
-                    meta_krrn_related = item_data.get("meta_krrn_related", "")
-                    meta_patent_id = item_data.get("meta_patent_id", "")
-
-                    # Set session state keys
-                    st.session_state.projectId   = proj_id
-                    st.session_state.projectName  = proj_name
-                    st.session_state.reportType   = rep_type
-                    st.session_state.meta_krrn         = meta_krrn
-                    st.session_state.meta_krid         = meta_krid
-                    st.session_state.meta_krrn_related = meta_krrn_related
-                    st.session_state.meta_patent_id    = meta_patent_id
-                    
-                    # Set checklist keys so user is not blocked and checklist shows passed
-                    st.session_state.checklist_passed = item_data.get("checklist_passed", True)
-                    st.session_state.checklist_data = item_data.get("checklist_data", {
-                        "chk_a1": True,
-                        "chk_a2": False,
-                        "chk_b1": True,
-                        "chk_b2": False,
-                        "chk_b3": False,
-                        "chk_b4": False,
-                        "chk_b5": False,
-                        "chk_b5_text": ""
-                    })
-                    chk_data = st.session_state.checklist_data
-                    st.session_state.chk_a1 = chk_data.get("chk_a1", True)
-                    st.session_state.chk_a2 = chk_data.get("chk_a2", False)
-                    st.session_state.chk_b1 = chk_data.get("chk_b1", True)
-                    st.session_state.chk_b2 = chk_data.get("chk_b2", False)
-                    st.session_state.chk_b3 = chk_data.get("chk_b3", False)
-                    st.session_state.chk_b4 = chk_data.get("chk_b4", False)
-                    st.session_state.chk_b5 = chk_data.get("chk_b5", False)
-                    st.session_state.chk_b5_text = chk_data.get("chk_b5_text", "")
-                    
-                    # Store them also in persistent shadow keys so pages/checklist.py reads them correctly
-                    st.session_state._p_chk_a1 = st.session_state.chk_a1
-                    st.session_state._p_chk_a2 = st.session_state.chk_a2
-                    st.session_state._p_chk_b1 = st.session_state.chk_b1
-                    st.session_state._p_chk_b2 = st.session_state.chk_b2
-                    st.session_state._p_chk_b3 = st.session_state.chk_b3
-                    st.session_state._p_chk_b4 = st.session_state.chk_b4
-                    st.session_state._p_chk_b5 = st.session_state.chk_b5
-                    st.session_state._p_chk_b5_text = st.session_state.chk_b5_text
-                    
-                    # Set widget keys to prevent race conditions on next rerun
-                    st.session_state["wid_projectId"]   = proj_id
-                    st.session_state["wid_projectName"]  = proj_name
-                    st.session_state["wid_reportType"]   = rep_type
-                    st.session_state["wid_meta_krrn"]         = meta_krrn
-                    st.session_state["wid_meta_krid"]         = meta_krid
-                    st.session_state["wid_meta_krrn_related"] = meta_krrn_related
-                    st.session_state["wid_meta_patent_id"]    = meta_patent_id
-                    
-                    # Handle section checkboxes (both widget and persistent shadow keys)
-                    sections = item_data.get("sections", {})
-                    if selection["type"] == "evaluation":
-                        # If it was a submission, we need to map the list back to checkboxes
-                        checked_list = item_data.get("sections_checked", [])
-                        sections = {s: (s in checked_list) for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']}
-                    
-                    for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
-                        val_s = sections.get(s, False)
-                        st.session_state[f"chk_{s}"] = val_s
-                        st.session_state[f"_p_chk_{s}"] = val_s
+                        # Set session state keys
+                        st.session_state.projectId   = proj_id
+                        st.session_state.projectName  = proj_name
+                        st.session_state.reportType   = rep_type
+                        st.session_state.meta_krrn         = meta_krrn
+                        st.session_state.meta_krid         = meta_krid
+                        st.session_state.meta_krrn_related = meta_krrn_related
+                        st.session_state.meta_patent_id    = meta_patent_id
                         
-                    # Handle field values (both widget and persistent shadow keys)
-                    fields = item_data.get("fields", {})
-                    field_defaults = {
-                        'b1': 0.0, 'b2': 0.0, 'b4': 100.0, 'b5': 1.0, 'b6': "รับจ้างวิจัย (1.0)", 'b7': 100.0,
-                        'c1': 0.0, 'c2': 0.0, 'c3': 0.0, 'c4': 0.0, 'c6': "รับจ้างวิจัย (1.0)", 'c7': 100.0,
-                        'd1': 0.0, 'd2': 0.0, 'd4': "รับจ้างวิจัย (1.0)", 'd5': 100.0,
-                        'e1': 0.0, 'e2': 8.0, 'e6': 0.0, 'e7': 0.0, 'e9': 1.0, 'e10': "รับจ้างวิจัย (1.0)", 'e11': 100.0,
-                        'f1': 0.0, 'f2': 100.0, 'f3': 100.0, 'f4': "รับจ้างวิจัย (1.0)", 'f5': 100.0,
-                        'g1': 1.0, 'g2': 0.0, 'g3': "รับจ้างวิจัย (1.0)", 'g4': 100.0,
-                        'h1': 0.0, 'h2': "รับจ้างวิจัย (1.0)", 'h3': 100.0,
-                        'i1': 0.0, 'i2': "รับจ้างวิจัย (1.0)", 'i3': 100.0,
-                        'j1': 0.0, 'j2': 100.0, 'j3': "รับจ้างวิจัย (1.0)", 'j4': 100.0,
-                        'k1': 0.0, 'k2': "รับจ้างวิจัย (1.0)", 'k3': 100.0
-                    }
-                    for k, v in field_defaults.items():
-                        loaded_val = fields.get(k, v)
-                        st.session_state[f"val_{k}"] = loaded_val
-                        st.session_state[f"_p_val_{k}"] = loaded_val
+                        # Set checklist keys so user is not blocked and checklist shows passed
+                        st.session_state.checklist_passed = item_data.get("checklist_passed", True)
+                        st.session_state.checklist_data = item_data.get("checklist_data", {
+                            "chk_a1": True,
+                            "chk_a2": False,
+                            "chk_b1": True,
+                            "chk_b2": False,
+                            "chk_b3": False,
+                            "chk_b4": False,
+                            "chk_b5": False,
+                            "chk_b5_text": ""
+                        })
+                        chk_data = st.session_state.checklist_data
+                        st.session_state.chk_a1 = chk_data.get("chk_a1", True)
+                        st.session_state.chk_a2 = chk_data.get("chk_a2", False)
+                        st.session_state.chk_b1 = chk_data.get("chk_b1", True)
+                        st.session_state.chk_b2 = chk_data.get("chk_b2", False)
+                        st.session_state.chk_b3 = chk_data.get("chk_b3", False)
+                        st.session_state.chk_b4 = chk_data.get("chk_b4", False)
+                        st.session_state.chk_b5 = chk_data.get("chk_b5", False)
+                        st.session_state.chk_b5_text = chk_data.get("chk_b5_text", "")
                         
-                    # Switch to Calculator page and Tab 1 immediately
-                    target_tab = "📋 1. ข้อมูลโครงการ (Details)"
-                    st.session_state.active_calc_tab = target_tab
-                    st.session_state.segmented_calc_tab = target_tab
-                    st.session_state.last_active_tab = target_tab
-                    
-                    # Set cloud loaded flag so calculator's cloud_load_on_startup doesn't overwrite
-                    st.session_state[f"_cloud_loaded_{proj_id}"] = True
-                    st.session_state["last_loaded_projectId"] = proj_id
-                    
-                    st.sidebar.success(f"✅ โหลดข้อมูลสำเร็จ!")
-                    st.switch_page("pages/calculator.py")
-        else:
-            st.sidebar.caption("ยังไม่มีประวัติการบันทึกหรือส่งรายงาน")
+                        # Store them also in persistent shadow keys so pages/checklist.py reads them correctly
+                        st.session_state._p_chk_a1 = st.session_state.chk_a1
+                        st.session_state._p_chk_a2 = st.session_state.chk_a2
+                        st.session_state._p_chk_b1 = st.session_state.chk_b1
+                        st.session_state._p_chk_b2 = st.session_state.chk_b2
+                        st.session_state._p_chk_b3 = st.session_state.chk_b3
+                        st.session_state._p_chk_b4 = st.session_state.chk_b4
+                        st.session_state._p_chk_b5 = st.session_state.chk_b5
+                        st.session_state._p_chk_b5_text = st.session_state.chk_b5_text
+                        
+                        # Set widget keys to prevent race conditions on next rerun
+                        st.session_state["wid_projectId"]   = proj_id
+                        st.session_state["wid_projectName"]  = proj_name
+                        st.session_state["wid_reportType"]   = rep_type
+                        st.session_state["wid_meta_krrn"]         = meta_krrn
+                        st.session_state["wid_meta_krid"]         = meta_krid
+                        st.session_state["wid_meta_krrn_related"] = meta_krrn_related
+                        st.session_state["wid_meta_patent_id"]    = meta_patent_id
+                        
+                        # Handle section checkboxes (both widget and persistent shadow keys)
+                        sections = item_data.get("sections", {})
+                        if selection["type"] == "evaluation":
+                            # If it was a submission, we need to map the list back to checkboxes
+                            checked_list = item_data.get("sections_checked", [])
+                            sections = {s: (s in checked_list) for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']}
+                        
+                        for s in ['B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
+                            val_s = sections.get(s, False)
+                            st.session_state[f"chk_{s}"] = val_s
+                            st.session_state[f"_p_chk_{s}"] = val_s
+                            
+                        # Handle field values (both widget and persistent shadow keys)
+                        fields = item_data.get("fields", {})
+                        field_defaults = {
+                            'b1': 0.0, 'b2': 0.0, 'b4': 100.0, 'b5': 1.0, 'b6': "รับจ้างวิจัย (1.0)", 'b7': 100.0,
+                            'c1': 0.0, 'c2': 0.0, 'c3': 0.0, 'c4': 0.0, 'c6': "รับจ้างวิจัย (1.0)", 'c7': 100.0,
+                            'd1': 0.0, 'd2': 0.0, 'd4': "รับจ้างวิจัย (1.0)", 'd5': 100.0,
+                            'e1': 0.0, 'e2': 8.0, 'e6': 0.0, 'e7': 0.0, 'e9': 1.0, 'e10': "รับจ้างวิจัย (1.0)", 'e11': 100.0,
+                            'f1': 0.0, 'f2': 100.0, 'f3': 100.0, 'f4': "รับจ้างวิจัย (1.0)", 'f5': 100.0,
+                            'g1': 1.0, 'g2': 0.0, 'g3': "รับจ้างวิจัย (1.0)", 'g4': 100.0,
+                            'h1': 0.0, 'h2': "รับจ้างวิจัย (1.0)", 'h3': 100.0,
+                            'i1': 0.0, 'i2': "รับจ้างวิจัย (1.0)", 'i3': 100.0,
+                            'j1': 0.0, 'j2': 100.0, 'j3': "รับจ้างวิจัย (1.0)", 'j4': 100.0,
+                            'k1': 0.0, 'k2': "รับจ้างวิจัย (1.0)", 'k3': 100.0
+                        }
+                        for k, v in field_defaults.items():
+                            loaded_val = fields.get(k, v)
+                            st.session_state[f"val_{k}"] = loaded_val
+                            st.session_state[f"_p_val_{k}"] = loaded_val
+                            
+                        # Switch to Calculator page and Tab 1 immediately
+                        target_tab = "📋 1. ข้อมูลโครงการ (Details)"
+                        st.session_state.active_calc_tab = target_tab
+                        st.session_state.segmented_calc_tab = target_tab
+                        st.session_state.last_active_tab = target_tab
+                        
+                        # Set cloud loaded flag so calculator's cloud_load_on_startup doesn't overwrite
+                        st.session_state[f"_cloud_loaded_{proj_id}"] = True
+                        st.session_state["last_loaded_projectId"] = proj_id
+                        
+                        st.sidebar.success(f"✅ โหลดข้อมูลสำเร็จ!")
+                        st.switch_page("pages/calculator.py")
+            else:
+                st.sidebar.caption("ยังไม่มีประวัติการบันทึกหรือส่งรายงาน")
 
     # 6. Page Routing
     pages = [
@@ -402,8 +470,7 @@ else:
             "meta_krrn", "meta_krid", "meta_krrn_related", "meta_patent_id",
             "active_calc_tab", "segmented_calc_tab", "last_active_tab"
         ]
-        # Clear all persistent shadow keys
-        keys_to_clear.extend([k for k in st.session_state.keys() if k.startswith("_p_") or k.startswith("val_") or k.startswith("chk_") or k.startswith("wid_")])
+        keys_to_clear.extend([k for k in st.session_state.keys() if k.startswith("_p_") or k.startswith("val_") or k.startswith("chk_") or k.startswith("wid_") or k.startswith("_cloud_loaded_")])
         for key in keys_to_clear:
             if key in st.session_state:
                 del st.session_state[key]
