@@ -280,42 +280,6 @@ else:
         with st.sidebar.expander("📂 ประวัติงานของฉัน (My History)", expanded=False):
             st.caption("กำลังดึงข้อมูลจากระบบคลาวด์...")
             
-            # Optimized with caching and visual feedback
-            @st.cache_data(ttl=60, show_spinner=False)
-            def get_cached_history(emp_id):
-                try:
-                    if not emp_id or emp_id == "Guest":
-                        return [], []
-                    
-                    firebase_config.get_db()
-                    
-                    import threading
-                    
-                    result = []
-                    
-                    def fetch_data():
-                        try:
-                            d = firebase_config.load_drafts(emp_id)
-                            e = firebase_config.load_user_evaluations(emp_id)
-                            result.append((d, e))
-                        except Exception:
-                            pass
-                            
-                    t = threading.Thread(target=fetch_data, daemon=True)
-                    t.start()
-                    t.join(timeout=3.0)
-                    
-                    if t.is_alive():
-                        print("Firebase fetch timed out (Daemon thread left running in background)")
-                        return [], []
-                    elif result:
-                        return result[0]
-                    else:
-                        return [], []
-                except Exception as e:
-                    print(f"Error fetching history: {e}")
-                    return [], []
-
             drafts, evals = get_cached_history(st.session_state.employee_id)
             
             options_map = {}
