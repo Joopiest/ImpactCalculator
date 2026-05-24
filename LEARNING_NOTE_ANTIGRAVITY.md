@@ -96,3 +96,28 @@ Streamlit is single-threaded per session. When multiple events are queued (e.g. 
 ### 🛠️ Solution: "Retrieve to Overwrite" Workflow
 *   **Conflict Detection:** Check Firestore when a Project ID is entered.
 *   **State Alignment:** Conflict resolution buttons ("Load Draft", "Delete & Start Fresh", "Retrieve to Overwrite") must explicitly set the `_cloud_loaded_{projectId} = True` flag in their callbacks to align states and enable autosave.
+
+---
+
+## 5. Problem: Ghost State Resurgence and Exclusivity Cascades (The Revisit Bug)
+### 🔍 Root Cause
+1. **Ghost States on Revisit:** When a user navigates between tabs, Streamlit garbage collects unrendered widgets. Upon return, if the session state wasn't perfectly synchronized, widgets (e.g., Checkbox B) might be initialized with a stale `True` value.
+2. **Exclusivity Cascade:** If the app has an exclusivity rule (e.g., "If B is checked, C must be unchecked"), the ghost state of B triggers the rule, auto-unchecking C. This causes Section C's UI and text inputs to disappear, giving the illusion of data loss.
+3. **Missing Payload Keys:** The `get_current_state_payload` function had hardcoded lists of keys to save to Firestore. Some keys (e.g., `c6`, `c7`) were missing, so loading a draft failed to restore them.
+
+### 🛠️ Solution: Hard Read-Time Lock & Payload Auditing
+*   **Read-Time Exclusivity Enforcement:** Instead of only enforcing rules on click events (`on_change`), enforce them inside the central read function (`_pc()`). Before returning a widget's value, verify its validity against conflicting states. If invalid, forcefully overwrite it to `False` in `st.session_state` immediately.
+*   **Implementation:**
+    ```python
+    def _pc(section):
+        val = ... # Read from session state or shadow key
+        
+        # Hard Exclusivity Enforcement
+        if section == 'B' and val:
+            for s in ['C', 'D', 'E', 'F', 'G']:
+                if st.session_state.get(f"_p_chk_{s}") or st.session_state.get(f"chk_{s}"):
+                    st.session_state[p_key] = False
+                    return False
+        return val
+    ```
+*   **Payload Auditing:** Ensure that the dictionary used for Firestore synchronization explicitly maps all UI fields (e.g., `c1, c2, c3, c4, c6, c7`).
